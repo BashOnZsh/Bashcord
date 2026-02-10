@@ -41,28 +41,56 @@ async function githubGet<T = any>(endpoint: string) {
     });
 }
 
+function extractHash(value: string | undefined | null) {
+    if (!value) return null;
+
+    const matches = value.match(/[0-9a-f]{7,40}/gi);
+    return matches?.[matches.length - 1] ?? null;
+}
+
+async function getLatestReleaseInfo() {
+    const data = await githubGet("/releases/latest");
+    let latestHash = extractHash(data.name) ?? extractHash(data.tag_name);
+
+    if (!latestHash) {
+        const ref = data.target_commitish || data.tag_name;
+        if (ref) {
+            const commit = await githubGet(`/commits/${encodeURIComponent(ref)}`);
+            latestHash = commit?.sha ?? null;
+        }
+    }
+
+    const asset = data.assets?.find(a => a.name === ASAR_FILE);
+
+    return {
+        latestHash,
+        assetUrl: asset?.browser_download_url ?? null,
+    };
+}
+
 async function calculateGitChanges() {
-    const isOutdated = await fetchUpdates();
-    if (!isOutdated) return [];
+    const { latestHash } = await getLatestReleaseInfo();
+    if (!latestHash || latestHash === gitHash) return [];
 
-    const data = await githubGet(`/compare/${gitHash}...HEAD`);
+    try {
+        const data = await githubGet(`/compare/${gitHash}...${latestHash}`);
 
-    return data.commits.map((c: any) => ({
-        hash: c.sha,
-        author: c.author?.login ?? c.commit?.author?.name ?? "Ghost",
-        message: c.commit.message.split("\n")[0]
-    }));
+        return data.commits.map((c: any) => ({
+            hash: c.sha,
+            author: c.author?.login ?? c.commit?.author?.name ?? "Ghost",
+            message: c.commit.message.split("\n")[0]
+        }));
+    } catch {
+        return [{ hash: latestHash, author: "Release", message: "Update available" }];
+    }
 }
 
 async function fetchUpdates() {
-    const data = await githubGet("/releases/latest");
+    const { latestHash, assetUrl } = await getLatestReleaseInfo();
+    if (!latestHash || latestHash === gitHash) return false;
+    if (!assetUrl) return false;
 
-    const hash = data.name.slice(data.name.lastIndexOf(" ") + 1);
-    if (hash === gitHash)
-        return false;
-
-    const asset = data.assets.find(a => a.name === ASAR_FILE);
-    PendingUpdate = asset.browser_download_url;
+    PendingUpdate = assetUrl;
 
     return true;
 }
