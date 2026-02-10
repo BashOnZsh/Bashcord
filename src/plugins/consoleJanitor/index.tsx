@@ -193,6 +193,13 @@ export default definePlugin({
             ]
         },
         {
+            find: "AnalyticsTrackImpressionContext function unimplemented",
+            replacement: {
+                match: /console\.(?:warn|log|error)\("AnalyticsTrackImpressionContext function unimplemented"\)/,
+                replace: "$self.Noop"
+            }
+        },
+        {
             find: "Slow dispatch on",
             replacement: [
                 {
