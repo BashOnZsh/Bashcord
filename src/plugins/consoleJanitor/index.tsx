@@ -200,6 +200,13 @@ export default definePlugin({
             }
         },
         {
+            find: "Deleting ReadState",
+            replacement: {
+                match: /console\.(?:log|info|warn|error)\([^)]*Deleting ReadState[^)]*\)/,
+                replace: "$self.Noop"
+            }
+        },
+        {
             find: "Slow dispatch on",
             replacement: [
                 {

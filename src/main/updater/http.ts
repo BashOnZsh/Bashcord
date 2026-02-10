@@ -41,6 +41,11 @@ async function githubGet<T = any>(endpoint: string) {
     });
 }
 
+function isRateLimitError(err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.includes("rate limit") || message.includes(" 403 ") || message.includes("403 ");
+}
+
 function extractHash(value: string | undefined | null) {
     if (!value) return null;
 
@@ -49,14 +54,29 @@ function extractHash(value: string | undefined | null) {
 }
 
 async function getLatestReleaseInfo() {
-    const data = await githubGet("/releases/latest");
+    let data: any;
+    try {
+        data = await githubGet("/releases/latest");
+    } catch (err) {
+        if (isRateLimitError(err)) {
+            return { latestHash: null, assetUrl: null };
+        }
+
+        throw err;
+    }
     let latestHash = extractHash(data.name) ?? extractHash(data.tag_name);
 
     if (!latestHash) {
         const ref = data.target_commitish || data.tag_name;
         if (ref) {
-            const commit = await githubGet(`/commits/${encodeURIComponent(ref)}`);
-            latestHash = commit?.sha ?? null;
+            try {
+                const commit = await githubGet(`/commits/${encodeURIComponent(ref)}`);
+                latestHash = commit?.sha ?? null;
+            } catch (err) {
+                if (!isRateLimitError(err)) {
+                    throw err;
+                }
+            }
         }
     }
 
