@@ -82,6 +82,18 @@ export default definePlugin({
 
     startAt: StartAt.Init,
     start() {
+        const sentryDisableErrorMessage = "Sentry successfully disabled";
+        const suppressSentryDisableError = (event: ErrorEvent) => {
+            const message = typeof event?.error?.message === "string" ? event.error.message : event?.message;
+            if (message !== sentryDisableErrorMessage) {
+                return;
+            }
+
+            event.preventDefault();
+        };
+
+        window.addEventListener("error", suppressSentryDisableError, true);
+
         // Sentry is initialized in its own WebpackInstance.
         // It has everything it needs preloaded, so, it doesn't include any chunk loading functionality.
         // Because of that, its WebpackInstance doesnt export wreq.m or wreq.c
