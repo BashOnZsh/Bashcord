@@ -7,7 +7,7 @@ on:
 env:
     FORCE_COLOR: true
     GITHUB_TOKEN: ${{ secrets.ETOKEN }}
-  GH_TOKEN: ${{ github.token }}
+    GH_TOKEN: ${{ github.token }}
     REPO: BashOnZsh/Bashcord
     USERNAME: GitHub-Actions
 
