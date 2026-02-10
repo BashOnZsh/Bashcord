@@ -42,7 +42,7 @@ curl -L https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashcord.e
 **Linux/macOS**
 ```bash
 # Script d'installation automatique
-curl -sS https://raw.githubusercontent.com/roothheo/Bashcord/main/misc/install.sh | bash
+curl -sS https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashcord-Linux-cli && ./Bashcord-Linux-cli
 ```
 
 ### Installation manuelle
