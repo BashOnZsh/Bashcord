@@ -68,6 +68,12 @@ jobs:
                   rm release/package.json
                   rm release/*.map
 
+            - name: Ensure Latest release
+              run: |
+                  if ! gh release view Latest > /dev/null 2>&1; then
+                      gh release create Latest --title "Latest" --notes "Automated build"
+                  fi
+
             - name: Upload Bashcord Stable
               run: |
                   gh release upload Latest --clobber dist/release/*
