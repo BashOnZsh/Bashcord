@@ -16,17 +16,17 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 
 Windows
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.exe)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli.exe)
+- [GUI](https://github.com/BashOnZsh/Bashotl/releases/latest/download/Bashotl.exe)
+- [CLI](https://github.com/BashOnZsh/Bashotl/releases/latest/download/BashotlCli.exe)
 
 MacOS
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.MacOS.zip)
+- [GUI](https://github.com/BashOnZsh/Bashotl/releases/latest/download/Bashotl.MacOS.zip)
 
 Linux
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux)
+- [GUI](https://github.com/BashOnZsh/Bashotl/releases/latest/download/Bashotl-x11)
+- [CLI](https://github.com/BashOnZsh/Bashotl/releases/latest/download/BashotlCli-Linux)
 - [AUR](https://aur.archlinux.org/packages?O=0&K=equicord)
 
 ```shell
