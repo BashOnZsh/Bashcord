@@ -40,6 +40,39 @@ function git(...args: string[]) {
     else return execFile("git", args, opts);
 }
 
+async function getCurrentBranch() {
+    const res = await git("branch", "--show-current");
+    const branch = res.stdout.trim();
+    return branch.length > 0 ? branch : null;
+}
+
+async function branchExistsOnOrigin(branch: string) {
+    const res = await git("ls-remote", "origin", `refs/heads/${branch}`);
+    return res.stdout.trim().length > 0;
+}
+
+async function getDefaultBranch() {
+    try {
+        const res = await git("symbolic-ref", "refs/remotes/origin/HEAD");
+        const ref = res.stdout.trim();
+        const match = ref.match(/refs\/remotes\/origin\/(.+)$/);
+        if (match?.[1]) return match[1];
+    } catch {
+        // ignore
+    }
+
+    if (await branchExistsOnOrigin("main")) return "main";
+    if (await branchExistsOnOrigin("master")) return "master";
+
+    return null;
+}
+
+async function getRemoteBranch() {
+    const branch = await getCurrentBranch();
+    if (branch) return branch;
+    return await getDefaultBranch();
+}
+
 async function getRepo() {
     const res = await git("remote", "get-url", "origin");
     return res.stdout.trim()
@@ -50,9 +83,10 @@ async function getRepo() {
 async function calculateGitChanges() {
     await git("fetch");
 
-    const branch = (await git("branch", "--show-current")).stdout.trim();
+    const branch = await getRemoteBranch();
+    if (!branch) return [];
 
-    const existsOnOrigin = (await git("ls-remote", "origin", branch)).stdout.length > 0;
+    const existsOnOrigin = await branchExistsOnOrigin(branch);
     if (!existsOnOrigin) return [];
 
     const res = await git("log", `HEAD...origin/${branch}`, "--pretty=format:%an/%h/%s");
@@ -68,8 +102,21 @@ async function calculateGitChanges() {
 }
 
 async function pull() {
-    const res = await git("pull");
-    return res.stdout.includes("Fast-forward");
+    let branch = await getCurrentBranch();
+    if (!branch) {
+        branch = await getDefaultBranch();
+        if (!branch) return false;
+
+        const status = await git("status", "--porcelain");
+        if (status.stdout.trim().length > 0) {
+            throw new Error("Working tree has uncommitted changes; cannot switch branches for update.");
+        }
+
+        await git("checkout", "-B", branch, `origin/${branch}`);
+    }
+
+    const res = await git("pull", "--ff-only");
+    return res.stdout.includes("Fast-forward") || res.stdout.includes("Updating");
 }
 
 async function build() {

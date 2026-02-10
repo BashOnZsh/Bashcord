@@ -60,6 +60,12 @@ export async function update() {
         isOutdated = false;
         if (!await Unwrap(VencordNative.updater.rebuild()))
             throw new Error("The Build failed. Please try manually building the new update");
+    } else {
+        try {
+            await checkForUpdates();
+        } catch {
+            // If refresh fails, keep previous state so the UI surfaces the issue.
+        }
     }
 
     return res;
