@@ -110,7 +110,7 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
         },
         {
             condition: isUserPlugin,
-            src: "https://equicord.org/assets/favicon.png",
+            src: "https://raw.githubusercontent.com/BashOnZsh/Bashcord/main/browser/icon.png",
             alt: "User",
             title: "User Plugin"
         }
