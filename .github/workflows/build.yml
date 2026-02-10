@@ -70,7 +70,7 @@ jobs:
 
             - name: Upload Bashcord Stable
               run: |
-                  gh release upload latest --clobber dist/release/*
+                  gh release upload Latest --clobber dist/release/*
 
             - name: Upload Plugin JSONs to Bashcord repo
               run: |
