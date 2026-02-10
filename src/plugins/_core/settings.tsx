@@ -92,7 +92,7 @@ interface SettingsLayoutBuilder {
 const settings = definePluginSettings({
     settingsLocation: {
         type: OptionType.SELECT,
-        description: "Where to put the Equicord settings section",
+        description: "Where to put the Bashcord settings section",
         options: [
             { label: "At the very top", value: "top" },
             { label: "Above the Nitro section", value: "aboveNitro", default: true },
@@ -229,8 +229,8 @@ export default definePlugin({
         const equicordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Equicord",
-                panelTitle: "Equicord Settings",
+                title: "Bashcord",
+                panelTitle: "Bashcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
@@ -249,7 +249,7 @@ export default definePlugin({
             !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
                 key: "equicord_updater",
                 title: "Updater",
-                panelTitle: "Equicord Updater",
+                panelTitle: "Bashcord Updater",
                 Component: UpdaterTab,
                 Icon: UpdaterIcon
             }),
@@ -262,7 +262,7 @@ export default definePlugin({
             buildEntry({
                 key: "equicord_cloud",
                 title: "Cloud",
-                panelTitle: "Equicord Cloud",
+                panelTitle: "Bashcord Cloud",
                 Component: CloudTab,
                 Icon: CloudIcon
             }),
@@ -284,7 +284,7 @@ export default definePlugin({
         const equicordSection: SettingsLayoutNode = {
             key: "equicord_section",
             type: LayoutTypes.SECTION,
-            useTitle: () => "Equicord Settings",
+            useTitle: () => "Bashcord Settings",
             buildLayout: () => equicordEntries
         };
 
@@ -320,12 +320,12 @@ export default definePlugin({
         return [
             {
                 section: SectionTypes.HEADER,
-                label: "Equicord",
+                label: "Bashcord",
                 className: "vc-settings-header",
             },
             {
                 section: "EquicordSettings",
-                label: "Equicord",
+                label: "Bashcord",
                 element: VencordTab,
                 className: "vc-settings",
             },
@@ -470,7 +470,7 @@ export default definePlugin({
     getInfoRows() {
         const { electronVersion, chromiumVersion, getVersionInfo } = this;
 
-        const rows = [`Equicord ${gitHashShort}${getVersionInfo()}`];
+        const rows = [`Bashcord ${gitHashShort}${getVersionInfo()}`];
 
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);
