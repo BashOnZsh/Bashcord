@@ -28,7 +28,6 @@ let followedUserInfo: TFollowedUserInfo = null;
 
 const voiceChannelAction = findByPropsLazy("selectVoiceChannel");
 const UserStore = findStoreLazy("UserStore");
-const RelationshipStore = findStoreLazy("RelationshipStore");
 
 const settings = definePluginSettings({
     onlyWhenInVoice: {
@@ -44,7 +43,7 @@ const settings = definePluginSettings({
 });
 
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { channel, user }: UserContextProps) => {
-    if (UserStore.getCurrentUser().id === user.id || !RelationshipStore.getFriendIDs().includes(user.id)) return;
+    if (UserStore.getCurrentUser().id === user.id) return;
 
     const [checked, setChecked] = React.useState(followedUserInfo?.userId === user.id);
 
@@ -61,10 +60,17 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { channel, 
                     return;
                 }
 
+                const targetChannelId = VoiceStateStore.getVoiceStateForUser(user.id)?.channelId ?? "";
+
                 followedUserInfo = {
-                    lastChannelId: UserStore.getCurrentUser().id,
+                    lastChannelId: targetChannelId,
                     userId: user.id
                 };
+
+                if (targetChannelId) {
+                    voiceChannelAction.selectVoiceChannel(targetChannelId);
+                }
+
                 setChecked(true);
             }}
         ></Menu.MenuCheckboxItem>
@@ -73,18 +79,17 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { channel, 
 
 export default definePlugin({
     name: "FollowVoiceUser",
-    description: "Follow a friend in voice chat.",
+    description: "Follow a user in voice chat.",
     authors: [EquicordDevs.TheArmagan],
     settings,
     settingsAboutComponent: () => (
         <Notice.Info>
-            This Plugin is used to follow a Friend/Friends into voice chat(s).
+            This Plugin is used to follow users into voice chat(s).
         </Notice.Info>
     ),
     flux: {
         async VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!followedUserInfo) return;
-            if (!RelationshipStore.getFriendIDs().includes(followedUserInfo.userId)) return;
 
             if (
                 settings.store.onlyWhenInVoice
