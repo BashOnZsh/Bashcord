@@ -192,8 +192,8 @@ export default definePlugin({
         const equicordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Equicord",
-                panelTitle: "Equicord Settings",
+                title: "Bashcord",
+                panelTitle: "Bashcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
