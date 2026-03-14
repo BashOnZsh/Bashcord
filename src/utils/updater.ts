@@ -28,6 +28,12 @@ export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[];
 
+function isIgnorableUpdateChange(change: { author: string; message: string; }) {
+    const isPluginSyncCommit = /^Plugins for https:\/\/github\.com\/.+\/commit\//i.test(change.message);
+    const isCiAuthor = /^(actions-user|github-actions(\[bot\])?)$/i.test(change.author.trim());
+    return isPluginSyncCommit && isCiAuthor;
+}
+
 async function Unwrap<T>(p: Promise<IpcRes<T>>) {
     const res = await p;
 
@@ -38,11 +44,12 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 }
 
 export async function checkForUpdates() {
-    changes = await Unwrap(VencordNative.updater.getUpdates());
+    const rawChanges = await Unwrap(VencordNative.updater.getUpdates());
+    changes = rawChanges.filter(c => !isIgnorableUpdateChange(c));
 
     // we only want to check this for the git updater, not the http updater
     if (!IS_STANDALONE) {
-        if (changes.some(c => c.hash === gitHash)) {
+        if (rawChanges.some(c => c.hash === gitHash)) {
             isNewer = true;
             return (isOutdated = false);
         }
