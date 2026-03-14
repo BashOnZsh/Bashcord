@@ -39,6 +39,8 @@ jobs:
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
                     "src/plugins/_core/settings.tsx"
+                    "README.md"
+                    "browser/icon.png"
                   )
                   mkdir -p /tmp/protected
                   for path in "${PROTECTED[@]}"; do
