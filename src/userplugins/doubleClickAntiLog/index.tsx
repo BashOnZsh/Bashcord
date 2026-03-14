@@ -1,14 +1,13 @@
 /*
- * Bashcord, a Discord client mod
- * Copyright (c) 2025 Bashcord contributors
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { FluxDispatcher, RestAPI, UserStore, Constants } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
+import { FluxDispatcher, UserStore } from "@webpack/common";
 
 const MessageActions = findByPropsLazy("deleteMessage", "startEditMessage", "_sendMessage");
 
@@ -18,9 +17,14 @@ const settings = definePluginSettings({
         description: "Activer la suppression AntiLog par double-clic",
         default: true
     },
+    emptyMessage: {
+        type: OptionType.BOOLEAN,
+        description: "Envoyer un message vide (invisible) à la place du message supprimé",
+        default: true
+    },
     blockMessage: {
         type: OptionType.STRING,
-        description: "Texte à afficher à la place du message supprimé (pour AntiLog)",
+        description: "Texte à envoyer à la place si le message vide est désactivé",
         default: "x"
     },
     deleteInterval: {
@@ -52,7 +56,7 @@ async function sendReplacementMessage(channelId: string, content: string, nonce:
         return null;
     }
 
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         // Écouter MESSAGE_CREATE pour récupérer l'ID du message de remplacement
         const messageCreateListener = (event: any) => {
             const message = event?.message;
@@ -185,7 +189,7 @@ export default definePlugin({
             performAntiLogDeletion(
                 msg.id,
                 channel.id,
-                settings.store.blockMessage,
+                settings.store.emptyMessage ? "\u17B5" : settings.store.blockMessage,
                 settings.store.deleteInterval
             ).catch(error => {
                 console.error("[DoubleClickAntiLog] Erreur lors de la suppression:", error);
@@ -195,4 +199,3 @@ export default definePlugin({
         }
     }
 });
-
