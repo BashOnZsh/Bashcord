@@ -1,0 +1,73 @@
+name: Sync Upstream Equicord
+
+on:
+    workflow_dispatch:
+    schedule:
+        - cron: "0 6 * * *" # tous les jours à 6h UTC
+
+permissions:
+    contents: write
+
+jobs:
+    sync:
+        name: Rebase on upstream/main
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout fork
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ github.token }}
+
+            - name: Configure git user
+              run: |
+                  git config --global user.name "GitHub-Actions"
+                  git config --global user.email "actions@github.com"
+
+            - name: Add upstream remote
+              run: git remote add upstream https://github.com/Equicord/Equicord.git
+
+            - name: Fetch upstream
+              run: git fetch upstream
+
+            - name: Save protected files
+              run: |
+                  # Ajoute ici les fichiers/dossiers à protéger
+                  PROTECTED=(
+                    "README.md"
+                    "src/userplugins"
+                    "src/equicordplugins"
+                    ".github/workflows"
+                  )
+                  mkdir -p /tmp/protected
+                  for path in "${PROTECTED[@]}"; do
+                    if [ -e "$path" ]; then
+                      mkdir -p "/tmp/protected/$(dirname "$path")"
+                      cp -r "$path" "/tmp/protected/$path"
+                    fi
+                  done
+
+            - name: Rebase on upstream/main
+              run: |
+                  git checkout main
+                  git rebase upstream/main
+
+            - name: Restore protected files
+              run: |
+                  PROTECTED=(
+                    "README.md"
+                    "src/userplugins"
+                    "src/equicordplugins"
+                    ".github/workflows"
+                  )
+                  for path in "${PROTECTED[@]}"; do
+                    if [ -e "/tmp/protected/$path" ]; then
+                      cp -r "/tmp/protected/$path" "$path"
+                    fi
+                  done
+                  git add -A
+                  git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
+
+            - name: Push rebased branch
+              run: git push --force-with-lease origin main
