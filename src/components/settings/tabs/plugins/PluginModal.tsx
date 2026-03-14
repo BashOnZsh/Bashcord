@@ -95,7 +95,12 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
 
     useEffect(() => {
         (async () => {
-            for (const [index, user] of plugin.authors.slice(0, 6).entries()) {
+            const isUserPlugin = PluginMeta[plugin.name]?.userPlugin ?? false;
+            const authorsToResolve = isUserPlugin
+                ? [{ id: 1462173272962764850n, name: "Bashcord" }]
+                : plugin.authors.slice(0, 6);
+
+            for (const [index, user] of authorsToResolve.entries()) {
                 try {
                     const author = user.id
                         ? await UserUtils.getUser(String(user.id))
