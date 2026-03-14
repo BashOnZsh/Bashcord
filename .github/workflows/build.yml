@@ -69,6 +69,7 @@ jobs:
 
             - name: Upload Equicord Stable
               run: |
+                gh release view latest >/dev/null 2>&1 || gh release create latest --target "$GITHUB_SHA" --title "Latest" --notes "Rolling release"
                   gh release upload latest --clobber dist/release/*
 
             - name: Upload Plugin JSONs to Equibored repo
