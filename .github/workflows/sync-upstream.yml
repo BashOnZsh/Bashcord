@@ -18,7 +18,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
-                  token: ${{ github.token }}
+                  token: ${{ secrets.SYNC_PAT }}
 
             - name: Configure git user
               run: |
@@ -38,6 +38,7 @@ jobs:
                     ".github/workflows"
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
+                    "src/plugins/_core/settings.tsx"
                   )
                   mkdir -p /tmp/protected
                   for path in "${PROTECTED[@]}"; do
@@ -58,6 +59,7 @@ jobs:
                     ".github/workflows"
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
+                    "src/plugins/_core/settings.tsx"
                   )
                   for path in "${PROTECTED[@]}"; do
                     if [ -e "/tmp/protected/$path" ]; then
@@ -68,4 +70,4 @@ jobs:
                   git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
 
             - name: Push rebased branch
-              run: git push --force-with-lease origin main
+              run: git push --force-with-lease https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
