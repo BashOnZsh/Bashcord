@@ -70,4 +70,6 @@ jobs:
                   git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
 
             - name: Push rebased branch
-              run: git push --force-with-lease https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
+              run: |
+                  git fetch https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
+                  git push --force-with-lease https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
