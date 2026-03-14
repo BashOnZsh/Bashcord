@@ -1,0 +1,190 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { definePluginSettings } from "@api/Settings";
+import definePlugin, { OptionType } from "@utils/types";
+import { findByProps } from "@webpack";
+import { React, useState } from "@webpack/common";
+import { Forms } from "@webpack/common";
+
+let originalVoiceStateUpdate: any;
+let fakeDeafenEnabled = false;
+
+function KeybindRecorder() {
+    const [isRecording, setIsRecording] = useState(false);
+    const [keybind, setKeybind] = useState(settings.store.keybind || "Ctrl+Shift+D");
+
+    React.useEffect(() => {
+        if (!isRecording) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Ignorer les touches modificatrices seules
+            if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+
+            const keys: string[] = [];
+            if (e.ctrlKey) keys.push("Ctrl");
+            if (e.shiftKey) keys.push("Shift");
+            if (e.altKey) keys.push("Alt");
+
+            // Ajouter la touche principale
+            const mainKey = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+            keys.push(mainKey);
+
+            const newKeybind = keys.join("+");
+            setKeybind(newKeybind);
+            settings.store.keybind = newKeybind;
+            setIsRecording(false);
+        };
+
+        document.addEventListener("keydown", handleKeyDown, true);
+        return () => document.removeEventListener("keydown", handleKeyDown, true);
+    }, [isRecording]);
+
+    return (
+        <Forms.FormSection>
+            <Forms.FormTitle tag="h3">Raccourci clavier</Forms.FormTitle>
+            <Forms.FormText>Cliquez sur "Enregistrer" puis appuyez sur la combinaison de touches souhaitée</Forms.FormText>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "8px" }}>
+                <input
+                    type="text"
+                    value={isRecording ? "Appuyez sur une touche..." : keybind}
+                    readOnly
+                    style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid var(--background-modifier-accent)",
+                        backgroundColor: isRecording ? "var(--background-tertiary)" : "var(--background-secondary)",
+                        color: "var(--text-normal)",
+                        flex: "1",
+                        cursor: "default"
+                    }}
+                />
+                <button
+                    onClick={() => setIsRecording(!isRecording)}
+                    style={{
+                        padding: "8px 16px",
+                        borderRadius: "4px",
+                        border: "none",
+                        backgroundColor: isRecording ? "var(--button-danger-background)" : "var(--button-secondary-background)",
+                        color: "var(--white)",
+                        cursor: "pointer"
+                    }}
+                >
+                    {isRecording ? "Annuler" : "Enregistrer"}
+                </button>
+            </div>
+        </Forms.FormSection>
+    );
+}
+
+const settings = definePluginSettings({
+    keybind: {
+        type: OptionType.STRING,
+        description: "Raccourci clavier actuel",
+        default: "Ctrl+Shift+D",
+        hidden: true
+    }
+});
+
+function handleKeyPress(e: KeyboardEvent) {
+    const keybind = settings.store.keybind || "Ctrl+Shift+D";
+    const keys = keybind.split("+");
+
+    const needsCtrl = keys.includes("Ctrl");
+    const needsShift = keys.includes("Shift");
+    const needsAlt = keys.includes("Alt");
+    const mainKey = keys[keys.length - 1].toUpperCase();
+
+    if (
+        e.ctrlKey === needsCtrl &&
+        e.shiftKey === needsShift &&
+        e.altKey === needsAlt &&
+        e.key.toUpperCase() === mainKey
+    ) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        fakeDeafenEnabled = !fakeDeafenEnabled;
+
+        const ChannelStore = findByProps("getChannel", "getDMFromUserId");
+        const SelectedChannelStore = findByProps("getVoiceChannelId");
+        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
+        const MediaEngineStore = findByProps("isDeaf", "isMute");
+
+        if (ChannelStore && SelectedChannelStore && GatewayConnection && typeof GatewayConnection.voiceStateUpdate === "function") {
+            const channelId = SelectedChannelStore.getVoiceChannelId?.();
+            const channel = channelId ? ChannelStore.getChannel?.(channelId) : null;
+
+            if (channel) {
+                if (fakeDeafenEnabled) {
+                    GatewayConnection.voiceStateUpdate({
+                        channelId: channel.id,
+                        guildId: channel.guild_id,
+                        selfMute: true,
+                        selfDeaf: true
+                    });
+                } else {
+                    const selfMute = MediaEngineStore?.isMute?.() ?? false;
+                    const selfDeaf = MediaEngineStore?.isDeaf?.() ?? false;
+                    GatewayConnection.voiceStateUpdate({
+                        channelId: channel.id,
+                        guildId: channel.guild_id,
+                        selfMute,
+                        selfDeaf
+                    });
+                }
+            }
+        }
+    }
+}
+
+export default definePlugin({
+    name: "FakeDeafen",
+    description: "Activez le fake deafen avec un raccourci clavier personnalisable. Vous apparaissez comme assourdis et mutés aux autres, mais vous pouvez toujours entendre et parler.",
+    authors: [{ name: "Baᛋh", id: 1462173272962764850 }],
+    settings,
+    settingsAboutComponent: () => <KeybindRecorder />,
+    start() {
+        console.log("[FakeDeafen] Plugin démarré - Raccourci:", settings.store.keybind);
+
+        // Add keyboard listener
+        document.addEventListener("keydown", handleKeyPress, true);
+
+        // Patch voiceStateUpdate
+        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
+        if (!GatewayConnection || typeof GatewayConnection.voiceStateUpdate !== "function") {
+            console.warn("[FakeDeafen] GatewayConnection.voiceStateUpdate not found");
+        } else {
+            originalVoiceStateUpdate = GatewayConnection.voiceStateUpdate;
+            GatewayConnection.voiceStateUpdate = function (args) {
+                if (fakeDeafenEnabled && args && typeof args === "object") {
+                    args.selfMute = true;
+                    args.selfDeaf = true;
+                }
+                return originalVoiceStateUpdate.apply(this, arguments);
+            };
+        }
+    },
+
+    stop() {
+        console.log("[FakeDeafen] Plugin arrêté");
+
+        // Remove keyboard listener
+        document.removeEventListener("keydown", handleKeyPress, true);
+
+        // Restore original function
+        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
+        if (GatewayConnection && originalVoiceStateUpdate) {
+            GatewayConnection.voiceStateUpdate = originalVoiceStateUpdate;
+        }
+
+        // Reset state
+        fakeDeafenEnabled = false;
+    }
+});
