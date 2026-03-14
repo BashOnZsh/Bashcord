@@ -63,6 +63,8 @@ jobs:
                   )
                   for path in "${PROTECTED[@]}"; do
                     if [ -e "/tmp/protected/$path" ]; then
+                      rm -rf "$path"
+                      mkdir -p "$(dirname "$path")"
                       cp -r "/tmp/protected/$path" "$path"
                     fi
                   done
