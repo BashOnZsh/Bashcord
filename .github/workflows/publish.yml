@@ -81,8 +81,53 @@ jobs:
               if: steps.check.outputs.release == 'true'
               run: zip -r dist/extension-sources.zip . -x "node_modules/*" -x "dist/*" -x ".git/*"
 
-            - name: Publish extension
+            - name: Check publish secrets
+              id: publish_secrets
               if: steps.check.outputs.release == 'true'
+              run: |
+                  missing=0
+                  for name in \
+                    CHROME_EXTENSION_ID \
+                    CHROME_PUBLISHER_ID \
+                    CHROME_CLIENT_ID \
+                    CHROME_CLIENT_SECRET \
+                    CHROME_REFRESH_TOKEN \
+                    FIREFOX_EXTENSION_ID \
+                    FIREFOX_JWT_ISSUER \
+                    FIREFOX_JWT_SECRET \
+                    EDGE_PRODUCT_ID \
+                    EDGE_CLIENT_ID \
+                    EDGE_API_KEY; do
+                    if [ -z "${!name}" ]; then
+                      echo "Missing $name"
+                      missing=1
+                    fi
+                  done
+
+                  if [ "$missing" -eq 0 ]; then
+                    echo "ready=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "ready=false" >> "$GITHUB_OUTPUT"
+                  fi
+              env:
+                  CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+                  CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+                  CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+                  CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+                  CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+                  FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+                  FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+                  FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+                  EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+                  EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+                  EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+
+            - name: Skip publish (missing secrets)
+              if: steps.check.outputs.release == 'true' && steps.publish_secrets.outputs.ready != 'true'
+              run: echo "Skipping browser extension publish because required secrets are not configured."
+
+            - name: Publish extension
+              if: steps.check.outputs.release == 'true' && steps.publish_secrets.outputs.ready == 'true'
               run: pnpx @equicord/publish-browser-extension@latest --chrome-zip dist/extension-chrome.zip --firefox-zip dist/extension-firefox.zip --firefox-sources-zip dist/extension-sources.zip --edge-zip dist/extension-chrome.zip
 
               env:
