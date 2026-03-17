@@ -21,6 +21,7 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain } from "electron";
 import { writeFileSync } from "original-fs";
+import { join } from "path";
 
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
@@ -71,7 +72,12 @@ async function applyUpdates() {
     if (!PendingUpdate) return true;
 
     const data = await fetchBuffer(PendingUpdate);
-    writeFileSync(__dirname, data, { flush: true });
+
+    // __dirname points inside the running asar tree; extract the asar file path.
+    const asarMatch = __dirname.match(new RegExp(`^(.*\\${ASAR_FILE})(?:\\/|$)`));
+    const asarPath = asarMatch?.[1] ?? join(__dirname, "..", "..", ASAR_FILE);
+
+    writeFileSync(asarPath, data, { flush: true });
 
     PendingUpdate = null;
 
