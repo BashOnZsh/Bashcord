@@ -1,6 +1,12 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { UserStore, FluxDispatcher } from "@webpack/common";
+import { UserStore } from "@webpack/common";
 
 // Récupération des stores et actions nécessaires
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
@@ -22,24 +28,39 @@ interface VoiceState {
     requestToSpeakTimestamp: string | null;
 }
 
-// Variables pour détecter les déconnexions volontaires
+const FLAG_RESET_MS = 3000;
+const INTERNAL_RECONNECT_FLAG_MS = 1500;
+const RECONNECT_CHECK_DELAY_MS = 250;
+const RECONNECT_ATTEMPT_DELAY_MS = 120;
+const RECONNECT_COOLDOWN_MS = 5000;
+const RECONNECT_ATTEMPT_WINDOW_MS = 20000;
+const MAX_RECONNECT_ATTEMPTS_IN_WINDOW = 3;
+
+// Variables de controle (anti-boucle)
 let isVoluntaryDisconnect = false;
 let disconnectTimeout: NodeJS.Timeout | null = null;
-let lastChannelId: string | null = null;
 let isChannelSwitching = false;
 let switchTimeout: NodeJS.Timeout | null = null;
+let reconnectCheckTimeout: NodeJS.Timeout | null = null;
+let internalReconnectFlagTimeout: NodeJS.Timeout | null = null;
+
+let internalReconnectInProgress = false;
+let pendingReconnectChannelId: string | null = null;
+let lastReconnectAttemptAt = 0;
+let reconnectWindowStart = 0;
+let reconnectAttemptsInWindow = 0;
+
 let originalSelectVoiceChannel: any = null;
 
 // Fonction pour marquer une déconnexion comme volontaire
 function markVoluntaryDisconnect() {
     isVoluntaryDisconnect = true;
     console.log("[AntiDéco] Déconnexion volontaire marquée");
-    // Reset le flag après un délai plus long
     if (disconnectTimeout) clearTimeout(disconnectTimeout);
     disconnectTimeout = setTimeout(() => {
         isVoluntaryDisconnect = false;
         console.log("[AntiDéco] Flag de déconnexion volontaire reseté");
-    }, 3000);
+    }, FLAG_RESET_MS);
 }
 
 // Fonction pour marquer un changement de canal
@@ -50,7 +71,98 @@ function markChannelSwitch() {
     switchTimeout = setTimeout(() => {
         isChannelSwitching = false;
         console.log("[AntiDéco] Flag de changement de canal reseté");
-    }, 3000);
+    }, FLAG_RESET_MS);
+}
+
+function markInternalReconnect() {
+    internalReconnectInProgress = true;
+    if (internalReconnectFlagTimeout) clearTimeout(internalReconnectFlagTimeout);
+    internalReconnectFlagTimeout = setTimeout(() => {
+        internalReconnectInProgress = false;
+    }, INTERNAL_RECONNECT_FLAG_MS);
+}
+
+function canAttemptReconnect() {
+    const now = Date.now();
+
+    if (now - lastReconnectAttemptAt < RECONNECT_COOLDOWN_MS) {
+        return false;
+    }
+
+    if (now - reconnectWindowStart > RECONNECT_ATTEMPT_WINDOW_MS) {
+        reconnectWindowStart = now;
+        reconnectAttemptsInWindow = 0;
+    }
+
+    if (reconnectAttemptsInWindow >= MAX_RECONNECT_ATTEMPTS_IN_WINDOW) {
+        return false;
+    }
+
+    return true;
+}
+
+function registerReconnectAttempt() {
+    const now = Date.now();
+
+    if (now - reconnectWindowStart > RECONNECT_ATTEMPT_WINDOW_MS) {
+        reconnectWindowStart = now;
+        reconnectAttemptsInWindow = 0;
+    }
+
+    reconnectAttemptsInWindow++;
+    lastReconnectAttemptAt = now;
+}
+
+function scheduleReconnect(oldChannelId: string, currentUserId: string) {
+    if (pendingReconnectChannelId === oldChannelId) {
+        return;
+    }
+
+    pendingReconnectChannelId = oldChannelId;
+
+    if (reconnectCheckTimeout) clearTimeout(reconnectCheckTimeout);
+    reconnectCheckTimeout = setTimeout(() => {
+        try {
+            if (isVoluntaryDisconnect || isChannelSwitching || internalReconnectInProgress) {
+                pendingReconnectChannelId = null;
+                return;
+            }
+
+            const currentState = VoiceStateStore.getVoiceStateForUser(currentUserId);
+            if (currentState?.channelId) {
+                // L'utilisateur est deja reconnecte (ou a change de salon)
+                pendingReconnectChannelId = null;
+                return;
+            }
+
+            if (!canAttemptReconnect()) {
+                console.log("[AntiDéco] Reconnexion ignorée (cooldown / limite de tentatives)");
+                pendingReconnectChannelId = null;
+                return;
+            }
+
+            registerReconnectAttempt();
+
+            setTimeout(() => {
+                try {
+                    markInternalReconnect();
+                    console.log(`[AntiDéco] Tentative de reconnexion au salon ${oldChannelId}`);
+                    if (originalSelectVoiceChannel) {
+                        originalSelectVoiceChannel.call(ChannelActions, oldChannelId);
+                    } else {
+                        ChannelActions.selectVoiceChannel(oldChannelId);
+                    }
+                } catch (error) {
+                    console.error("[AntiDéco] Erreur lors de la reconnexion:", error);
+                } finally {
+                    pendingReconnectChannelId = null;
+                }
+            }, RECONNECT_ATTEMPT_DELAY_MS);
+        } catch (error) {
+            pendingReconnectChannelId = null;
+            console.error("[AntiDéco] Erreur dans scheduleReconnect:", error);
+        }
+    }, RECONNECT_CHECK_DELAY_MS);
 }
 
 export default definePlugin({
@@ -80,11 +192,6 @@ export default definePlugin({
                 // On ne s'intéresse qu'aux événements de l'utilisateur actuel
                 if (userId !== currentUserId) continue;
 
-                // Stocker le canal actuel pour la prochaine fois
-                if (channelId) {
-                    lastChannelId = channelId;
-                }
-
                 // Détection d'une déconnexion :
                 // L'utilisateur était dans un salon (oldChannelId existe)
                 // mais n'est plus dans aucun salon (channelId est null/undefined)
@@ -93,57 +200,32 @@ export default definePlugin({
 
                     // Vérifier si c'est une déconnexion volontaire
                     if (isVoluntaryDisconnect) {
-                        console.log(`[AntiDéco] Déconnexion volontaire confirmée, pas de reconnexion`);
-                        return;
+                        console.log("[AntiDéco] Déconnexion volontaire confirmée, pas de reconnexion");
+                        continue;
                     }
 
                     // Vérifier si c'est un changement de canal en cours
                     if (isChannelSwitching) {
-                        console.log(`[AntiDéco] Changement de canal en cours, pas de reconnexion`);
-                        return;
+                        console.log("[AntiDéco] Changement de canal en cours, pas de reconnexion");
+                        continue;
                     }
 
-                    // Attendre un peu pour voir si un nouveau canal est sélectionné (changement rapide)
-                    setTimeout(() => {
-                        // Vérifier encore une fois si ce n'est pas une déconnexion volontaire
-                        if (isVoluntaryDisconnect || isChannelSwitching) {
-                            console.log(`[AntiDéco] Déconnexion volontaire ou changement de canal détecté pendant l'attente`);
-                            return;
-                        }
+                    // Ignorer les événements déclenchés par la reconnexion interne
+                    if (internalReconnectInProgress) {
+                        console.log("[AntiDéco] Déconnexion liée à une reconnexion interne, ignorée");
+                        continue;
+                    }
 
-                        const currentState = VoiceStateStore.getVoiceStateForUser(currentUserId);
-
-                        // Si l'utilisateur est maintenant dans un autre canal, c'était un changement
-                        if (currentState?.channelId) {
-                            console.log(`[AntiDéco] Changement de canal détecté (${oldChannelId} -> ${currentState.channelId}), pas de reconnexion`);
-                            return;
-                        }
-
-                        // Si on arrive ici, c'est vraiment une déconnexion forcée
-                        console.log(`[AntiDéco] Déconnexion FORCÉE confirmée du salon ${oldChannelId}`);
-
-                        // Tentative de reconnexion
-                        setTimeout(() => {
-                            try {
-                                console.log(`[AntiDéco] Tentative de reconnexion au salon ${oldChannelId}`);
-                                // Utiliser la fonction originale pour éviter les boucles
-                                if (originalSelectVoiceChannel) {
-                                    originalSelectVoiceChannel.call(ChannelActions, oldChannelId);
-                                } else {
-                                    ChannelActions.selectVoiceChannel(oldChannelId);
-                                }
-                            } catch (error) {
-                                console.error("[AntiDéco] Erreur lors de la reconnexion:", error);
-                            }
-                        }, 100);
-
-                    }, 200);
+                    console.log(`[AntiDéco] Déconnexion FORCÉE détectée du salon ${oldChannelId}`);
+                    scheduleReconnect(oldChannelId, currentUserId);
                 }
             }
         },
 
         // Écouter les actions de déconnexion volontaire
         VOICE_CHANNEL_SELECT({ channelId }: { channelId: string | null; }) {
+            if (internalReconnectInProgress) return;
+
             const currentUser = UserStore.getCurrentUser();
             if (!currentUser) return;
 
@@ -178,6 +260,10 @@ export default definePlugin({
 
         // Écouter les événements de clic sur le bouton de déconnexion
         ChannelActions.selectVoiceChannel = function (channelId: string | null) {
+            if (internalReconnectInProgress) {
+                return originalSelectVoiceChannel.call(this, channelId);
+            }
+
             const currentUser = UserStore.getCurrentUser();
             if (!currentUser) return originalSelectVoiceChannel.call(this, channelId);
 
@@ -217,8 +303,20 @@ export default definePlugin({
             clearTimeout(switchTimeout);
             switchTimeout = null;
         }
+        if (reconnectCheckTimeout) {
+            clearTimeout(reconnectCheckTimeout);
+            reconnectCheckTimeout = null;
+        }
+        if (internalReconnectFlagTimeout) {
+            clearTimeout(internalReconnectFlagTimeout);
+            internalReconnectFlagTimeout = null;
+        }
         isVoluntaryDisconnect = false;
         isChannelSwitching = false;
-        lastChannelId = null;
+        internalReconnectInProgress = false;
+        pendingReconnectChannelId = null;
+        lastReconnectAttemptAt = 0;
+        reconnectWindowStart = 0;
+        reconnectAttemptsInWindow = 0;
     }
 });
