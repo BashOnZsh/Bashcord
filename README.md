@@ -238,7 +238,7 @@ De plus, assurez-vous de ne pas publier de captures d'écran avec Bashcord dans 
 
 ## 📞 Support
 
-- **Discord** : miserablepersonne
+- **Discord** : fullopsecbash_95217
 
 ---
 
