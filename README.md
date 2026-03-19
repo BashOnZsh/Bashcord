@@ -35,8 +35,8 @@ Bashcord inclut tous les plugins d'Equicord plus nos plugins exclusifs :
 **Windows**
 ```bash
 # Télécharger et exécuter l'installateur
-curl -L https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashotl.exe -o Bashotl.exe
-./Bashotl.exe
+curl https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashotl.exe -o Bashotl.exe
+.\Bashotl.exe
 ```
 
 **Linux/macOS**
