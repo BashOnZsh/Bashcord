@@ -4,14 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings } from "@api/Settings";
 import * as DataStore from "@api/DataStore";
-import { Devs } from "@utils/constants";
+import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
-import { FluxDispatcher, MessageStore, RestAPI, UserStore, Constants } from "@webpack/common";
-import { findByPropsLazy } from "@webpack";
-
-const MessageActions = findByPropsLazy("deleteMessage", "startEditMessage");
+import { Constants, FluxDispatcher, MessageStore, RestAPI, UserStore } from "@webpack/common";
 
 interface TrackedMessage {
     id: string;
@@ -272,7 +268,7 @@ const settings = definePluginSettings({
 
 const STORAGE_KEY = "AutoDeleter_TrackedMessages";
 
-// Fonctions pour la suppression AntiLog
+// Fonctions utilitaires pour la suppression AntiLog
 function messageSendWrapper(content: string, nonce: string, channelId: string) {
     const wrapperResponse = RestAPI.post({
         url: Constants.Endpoints.MESSAGES(channelId),
@@ -291,8 +287,23 @@ async function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function messageDeleteWrapper(channelId: string, messageId: string) {
-    MessageActions.deleteMessage(channelId, messageId);
+function parseCsvList(raw: string): string[] {
+    return raw
+        .split(",")
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
+function getAntiLogReplacementContent() {
+    // Keep an invisible fallback to avoid Discord rejecting an empty content payload.
+    const configured = settings.store.blockMessage?.trim();
+    return configured && configured.length > 0 ? configured : "\u17B5";
+}
+
+async function messageDeleteWrapper(channelId: string, messageId: string) {
+    await RestAPI.del({
+        url: `/channels/${channelId}/messages/${messageId}`
+    });
 }
 
 export default definePlugin({
@@ -329,7 +340,7 @@ export default definePlugin({
     channelCache: new Map<string, any>(),
 
     // Queue de suppression par lots
-    deletionQueue: [] as Array<{messageId: string, channelId: string, mode: string}>,
+    deletionQueue: [] as Array<{ messageId: string; channelId: string; mode: string; }>,
     batchProcessor: null as NodeJS.Timeout | null,
 
     // Gestion des rate limits avancée
@@ -348,8 +359,11 @@ export default definePlugin({
     },
 
     // Cache des tentatives de suppression
-    retryQueue: [] as Array<{messageId: string, channelId: string, mode: string, attempts: number, nextRetry: number}>,
+    retryQueue: [] as Array<{ messageId: string; channelId: string; mode: string; attempts: number; nextRetry: number; }>,
     retryProcessor: null as NodeJS.Timeout | null,
+
+    // Horodatage de démarrage pour les stats d'uptime
+    startTime: 0,
 
     // Throttling intelligent
     throttlingInfo: {
@@ -362,6 +376,7 @@ export default definePlugin({
 
     async start() {
         this.log("Plugin AutoDeleter démarré");
+        this.startTime = Date.now();
 
         // Lier le contexte pour onMessageCreate
         this.boundOnMessageCreate = this.onMessageCreate.bind(this);
@@ -389,6 +404,17 @@ export default definePlugin({
                 clearTimeout(message.timeoutId);
             }
         });
+
+        // Arrêter les processeurs pour éviter les boucles résiduelles
+        if (this.batchProcessor) {
+            clearInterval(this.batchProcessor);
+            this.batchProcessor = null;
+        }
+
+        if (this.retryProcessor) {
+            clearInterval(this.retryProcessor);
+            this.retryProcessor = null;
+        }
 
         // Sauvegarder les messages restants
         this.saveTrackedMessages();
@@ -545,10 +571,7 @@ export default definePlugin({
 
     shouldProcessChannel(channelId: string): boolean {
         const mode = settings.store.channelMode;
-        const channelList = settings.store.channelList
-            .split(',')
-            .map(id => id.trim())
-            .filter(id => id.length > 0);
+        const channelList = parseCsvList(settings.store.channelList);
 
         switch (mode) {
             case "all":
@@ -570,10 +593,7 @@ export default definePlugin({
 
         if (mode !== "guilds") return true;
 
-        const guildList = settings.store.guildList
-            .split(',')
-            .map(id => id.trim())
-            .filter(id => id.length > 0);
+        const guildList = parseCsvList(settings.store.guildList);
 
         return guildList.includes(guildId);
     },
@@ -582,9 +602,8 @@ export default definePlugin({
         const content = message.content || "";
 
         // Vérifier les mots-clés de préservation
-        const keywords = settings.store.preserveKeywords
-            .split(',')
-            .map(keyword => keyword.trim().toLowerCase())
+        const keywords = parseCsvList(settings.store.preserveKeywords)
+            .map(keyword => keyword.toLowerCase())
             .filter(keyword => keyword.length > 0);
 
         if (keywords.length > 0) {
@@ -624,9 +643,8 @@ export default definePlugin({
     shouldDeleteImmediately(content: string): boolean {
         if (!content) return false;
 
-        const keywords = settings.store.deleteKeywords
-            .split(',')
-            .map(keyword => keyword.trim().toLowerCase())
+        const keywords = parseCsvList(settings.store.deleteKeywords)
+            .map(keyword => keyword.toLowerCase())
             .filter(keyword => keyword.length > 0);
 
         if (keywords.length === 0) return false;
@@ -710,7 +728,12 @@ export default definePlugin({
     scheduleMessageDeletion(message: any, customDelay?: number) {
         const delay = customDelay || this.getDelayInMs();
         const scheduledTime = Date.now() + delay;
-        const deletionMode = settings.store.deletionMode;
+        const { deletionMode } = settings.store;
+
+        const existing = this.trackedMessages.get(message.id);
+        if (existing?.timeoutId) {
+            clearTimeout(existing.timeoutId);
+        }
 
         this.debug(`Programmation suppression message ${message.id} dans ${delay}ms (${new Date(scheduledTime).toLocaleString()}) - Mode: ${deletionMode}`);
 
@@ -791,7 +814,7 @@ export default definePlugin({
             try {
                 await this.deleteMessage(item.messageId, item.channelId, item.mode);
             } catch (error) {
-                this.error(`Erreur dans le batch de suppression:`, error);
+                this.error("Erreur dans le batch de suppression:", error);
             }
         }
     },
@@ -839,21 +862,13 @@ export default definePlugin({
                 return;
             }
 
-            // Mettre à jour les statistiques
-            this.stats.hourlyDeletions++;
-            this.stats.deletionModes[deletionMode] = (this.stats.deletionModes[deletionMode] || 0) + 1;
-            this.stats.channelStats[channelId] = (this.stats.channelStats[channelId] || 0) + 1;
-
-            // Récupérer les informations du message pour les statistiques
-            const trackedMessage = this.trackedMessages.get(messageId);
-            if (trackedMessage) {
-                this.stats.totalBytesSaved += trackedMessage.length || 0;
-                this.updateAverageMessageLength(trackedMessage.length || 0);
-            }
-
             switch (deletionMode) {
                 case "antilog":
-                    await this.performAntiLogDeletion(messageId, channelId);
+                    if (settings.store.useAntiLogDeletion) {
+                        await this.performAntiLogDeletion(messageId, channelId);
+                    } else {
+                        await this.performNormalDeletion(messageId, channelId);
+                    }
                     break;
                 case "silent":
                     await this.performSilentDeletion(messageId, channelId);
@@ -864,6 +879,17 @@ export default definePlugin({
                 default:
                     await this.performNormalDeletion(messageId, channelId);
                     break;
+            }
+
+            // Mettre à jour les statistiques seulement après succès réel
+            this.stats.hourlyDeletions++;
+            this.stats.deletionModes[deletionMode] = (this.stats.deletionModes[deletionMode] || 0) + 1;
+            this.stats.channelStats[channelId] = (this.stats.channelStats[channelId] || 0) + 1;
+
+            const trackedMessage = this.trackedMessages.get(messageId);
+            if (trackedMessage) {
+                this.stats.totalBytesSaved += trackedMessage.length || 0;
+                this.updateAverageMessageLength(trackedMessage.length || 0);
             }
 
             this.log(`Message ${messageId} supprimé avec succès (${deletionMode})`);
@@ -970,6 +996,16 @@ export default definePlugin({
         const baseDelay = delay || (settings.store.retryDelay * this.rateLimitInfo.backoffMultiplier);
         const nextRetry = Date.now() + baseDelay;
 
+        const existing = this.retryQueue.find(item => item.messageId === messageId);
+        if (existing) {
+            existing.channelId = channelId;
+            existing.mode = mode;
+            existing.attempts = Math.max(existing.attempts, attempts);
+            existing.nextRetry = Math.min(existing.nextRetry, nextRetry);
+            this.debug(`Retry déjà en queue: ${messageId} (mise à jour)`);
+            return;
+        }
+
         this.retryQueue.push({
             messageId,
             channelId,
@@ -1028,8 +1064,12 @@ export default definePlugin({
                 url: `/channels/${channelId}/messages/${messageId}`
             });
         } catch (error) {
-            // En cas d'erreur, essayer la suppression AntiLog
-            await this.performAntiLogDeletion(messageId, channelId);
+            // Fallback antiLog uniquement si explicitement activé
+            if (settings.store.useAntiLogDeletion) {
+                await this.performAntiLogDeletion(messageId, channelId);
+            } else {
+                throw error;
+            }
         }
     },
 
@@ -1058,8 +1098,21 @@ export default definePlugin({
 
     // Nouvelle fonction pour la suppression AntiLog avec gestion des rate limits
     async performAntiLogDeletion(messageId: string, channelId: string) {
+        if (!settings.store.useAntiLogDeletion) {
+            await this.performNormalDeletion(messageId, channelId);
+            return;
+        }
+
         try {
             this.debug(`Suppression AntiLog du message ${messageId}`);
+
+            // Hint pour les plugins de logging côté client
+            FluxDispatcher.dispatch({
+                type: "MESSAGE_DELETE",
+                channelId,
+                id: messageId,
+                mlDeleted: true
+            });
 
             // Délai plus long et aléatoire pour éviter les rate limits
             const randomDelay = Math.random() * 500 + 1000; // 1000-1500ms
@@ -1067,11 +1120,14 @@ export default definePlugin({
 
             // Envoyer un message de remplacement
             const buggedMsgResponse = await messageSendWrapper(
-                settings.store.blockMessage,
+                getAntiLogReplacementContent(),
                 messageId,
                 channelId
             );
-            const buggedMsgId = buggedMsgResponse.body.id;
+            const buggedMsgId = buggedMsgResponse?.body?.id;
+            if (!buggedMsgId) {
+                throw new Error("AntiLog: impossible d'obtenir l'id du message de remplacement");
+            }
 
             // Délai beaucoup plus long entre les suppressions
             const deleteDelay = Math.max(settings.store.deleteInterval, 3000); // Minimum 3 secondes
@@ -1111,7 +1167,7 @@ export default definePlugin({
     },
 
     showNotification(message: string, type: "success" | "error" | "info" = "info") {
-        const notificationType = settings.store.notificationType;
+        const { notificationType } = settings.store;
         const prefix = type === "error" ? "❌" : type === "success" ? "✅" : "ℹ️";
         const logMessage = `[AutoDeleter] ${prefix} ${message}`;
 
@@ -1340,11 +1396,11 @@ export default definePlugin({
     exportStats() {
         const stats = this.getStats();
         const dataStr = JSON.stringify(stats, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
-        link.download = `autodeleter-stats-${new Date().toISOString().split('T')[0]}.json`;
+        link.download = `autodeleter-stats-${new Date().toISOString().split("T")[0]}.json`;
         link.click();
         URL.revokeObjectURL(url);
         this.log("Statistiques exportées");
@@ -1356,7 +1412,7 @@ export default definePlugin({
             const importedSettings = JSON.parse(settingsData);
             // Valider et appliquer les paramètres importés
             Object.keys(importedSettings).forEach(key => {
-                if (settings.store.hasOwnProperty(key)) {
+                if (Object.prototype.hasOwnProperty.call(settings.store, key)) {
                     settings.store[key] = importedSettings[key];
                 }
             });

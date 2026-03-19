@@ -5,13 +5,13 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings } from "@api/Settings";
 import { showNotification } from "@api/Notifications";
+import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { Channel } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, Menu, RestAPI, showToast, Toasts, UserStore } from "@webpack/common";
-import { Channel } from "discord-types/general";
+import { ChannelStore, Menu, RestAPI, showToast, Toasts, UserStore } from "@webpack/common";
 
 // Utiliser PrivateChannelSortStore comme dans les autres plugins
 const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
@@ -27,17 +27,27 @@ const settings = definePluginSettings({
         description: "Afficher les notifications lors des actions",
         default: true
     },
+    silentMode: {
+        type: OptionType.BOOLEAN,
+        description: "Mode discret: n'affiche ni notifications, ni toasts, ni logs d'info",
+        default: true
+    },
     confirmBeforeLeave: {
         type: OptionType.BOOLEAN,
         description: "Demander confirmation avant de quitter tous les groupes",
         default: false
+    },
+    leaveSilently: {
+        type: OptionType.BOOLEAN,
+        description: "Activer 'Quitter sans en informer les autres membres' par défaut",
+        default: true
     },
     delayBetweenLeaves: {
         type: OptionType.NUMBER,
         description: "Délai en millisecondes entre chaque sortie de groupe (pour éviter le rate limiting)",
         default: 200,
         min: 50,
-        max: 100
+        max: 5000
     },
     debugMode: {
         type: OptionType.BOOLEAN,
@@ -48,6 +58,8 @@ const settings = definePluginSettings({
 
 // Fonction de log avec préfixe
 function log(message: string, level: "info" | "warn" | "error" = "info") {
+    if (settings.store.silentMode && level === "info") return;
+
     const timestamp = new Date().toLocaleTimeString();
     const prefix = `[LeaveAllGroups ${timestamp}]`;
 
@@ -70,6 +82,20 @@ function debugLog(message: string) {
     }
 }
 
+function notify(title: string, body: string, toastType?: string, toastBody?: string) {
+    if (settings.store.silentMode || !settings.store.showNotifications) return;
+
+    showNotification({
+        title,
+        body,
+        icon: undefined
+    });
+
+    if (toastType != null && toastBody) {
+        showToast(toastBody, toastType);
+    }
+}
+
 // Fonction pour confirmer l'action
 function confirmLeaveAll(groupCount: number): boolean {
     if (!settings.store.confirmBeforeLeave) return true;
@@ -88,7 +114,11 @@ async function leaveGroup(channelId: string): Promise<boolean> {
 
         // Utiliser l'API Discord pour quitter le groupe
         await RestAPI.del({
-            url: `/channels/${channelId}`
+            url: `/channels/${channelId}`,
+            query: {
+                // Discord option: "Quitter sans en informer les autres membres"
+                silent: settings.store.leaveSilently
+            }
         });
 
         debugLog(`✅ Groupe ${channelId} quitté avec succès`);
@@ -139,16 +169,7 @@ async function leaveAllGroups() {
 
         if (groups.length === 0) {
             log("Aucun groupe à quitter", "warn");
-
-            if (settings.store.showNotifications) {
-                showNotification({
-                    title: "ℹ️ LeaveAllGroups",
-                    body: "Aucun groupe à quitter",
-                    icon: undefined
-                });
-            }
-
-            showToast(Toasts.Type.MESSAGE, "ℹ️ Aucun groupe à quitter");
+            notify("ℹ️ LeaveAllGroups", "Aucun groupe à quitter", Toasts.Type.MESSAGE, "ℹ️ Aucun groupe à quitter");
             return;
         }
 
@@ -163,16 +184,12 @@ async function leaveAllGroups() {
         let successCount = 0;
         let failureCount = 0;
 
-        // Notification de début
-        if (settings.store.showNotifications) {
-            showNotification({
-                title: "🔄 LeaveAllGroups en cours",
-                body: `Sortie de ${groups.length} groupe(s) en cours...`,
-                icon: undefined
-            });
-        }
-
-        showToast(Toasts.Type.MESSAGE, `🔄 Sortie de ${groups.length} groupe(s) en cours...`);
+        notify(
+            "🔄 LeaveAllGroups en cours",
+            `Sortie de ${groups.length} groupe(s) en cours...`,
+            Toasts.Type.MESSAGE,
+            `🔄 Sortie de ${groups.length} groupe(s) en cours...`
+        );
 
         // Quitter chaque groupe
         for (const group of groups) {
@@ -201,39 +218,26 @@ async function leaveAllGroups() {
 - Succès: ${successCount}
 - Échecs: ${failureCount}`);
 
-        // Notification finale
-        if (settings.store.showNotifications) {
-            const title = failureCount > 0 ? "⚠️ LeaveAllGroups terminé avec erreurs" : "✅ LeaveAllGroups terminé";
-            const body = failureCount > 0
-                ? `${successCount} groupes quittés, ${failureCount} échecs`
-                : `${successCount} groupes quittés avec succès`;
+        const title = failureCount > 0 ? "⚠️ LeaveAllGroups terminé avec erreurs" : "✅ LeaveAllGroups terminé";
+        const body = failureCount > 0
+            ? `${successCount} groupes quittés, ${failureCount} échecs`
+            : `${successCount} groupes quittés avec succès`;
 
-            showNotification({
-                title,
-                body,
-                icon: undefined
-            });
-        }
-
-        // Toast final
         if (failureCount > 0) {
-            showToast(Toasts.Type.FAILURE, `⚠️ ${successCount} groupes quittés, ${failureCount} échecs`);
+            notify(title, body, Toasts.Type.FAILURE, `⚠️ ${successCount} groupes quittés, ${failureCount} échecs`);
         } else {
-            showToast(Toasts.Type.SUCCESS, `✅ ${successCount} groupes quittés avec succès`);
+            notify(title, body, Toasts.Type.SUCCESS, `✅ ${successCount} groupes quittés avec succès`);
         }
 
     } catch (error) {
         log(`❌ Erreur générale: ${error}`, "error");
 
-        if (settings.store.showNotifications) {
-            showNotification({
-                title: "❌ LeaveAllGroups - Erreur",
-                body: "Une erreur est survenue lors de la sortie des groupes",
-                icon: undefined
-            });
-        }
-
-        showToast(Toasts.Type.FAILURE, "❌ Erreur lors de la sortie des groupes");
+        notify(
+            "❌ LeaveAllGroups - Erreur",
+            "Une erreur est survenue lors de la sortie des groupes",
+            Toasts.Type.FAILURE,
+            "❌ Erreur lors de la sortie des groupes"
+        );
     }
 }
 
