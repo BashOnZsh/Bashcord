@@ -3,14 +3,14 @@ name: Sync Upstream Equicord
 on:
     workflow_dispatch:
     schedule:
-        - cron: "0 6 * * *" # tous les jours à 6h UTC
+        - cron: "0 6 * * *" # tous les jours a 6h UTC
 
 permissions:
     contents: write
 
 jobs:
     sync:
-        name: Rebase on upstream/main
+        name: Sync with upstream main
         runs-on: ubuntu-latest
 
         steps:
@@ -33,7 +33,6 @@ jobs:
 
             - name: Save protected files
               run: |
-                  # Ajoute ici les fichiers/dossiers à protéger
                   PROTECTED=(
                     ".github/workflows"
                     "src/userplugins"
@@ -50,10 +49,10 @@ jobs:
                     fi
                   done
 
-            - name: Rebase on upstream/main
+            - name: Reset to upstream main
               run: |
                   git checkout main
-                  git rebase upstream/main
+                  git reset --hard upstream/main
 
             - name: Restore protected files
               run: |
@@ -62,6 +61,8 @@ jobs:
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
                     "src/plugins/_core/settings.tsx"
+                    "README.md"
+                    "browser/icon.png"
                   )
                   for path in "${PROTECTED[@]}"; do
                     if [ -e "/tmp/protected/$path" ]; then
@@ -73,5 +74,5 @@ jobs:
                   git add -A
                   git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
 
-            - name: Push rebased branch
+            - name: Push synced branch
               run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
