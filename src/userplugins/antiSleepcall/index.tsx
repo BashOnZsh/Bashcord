@@ -5,15 +5,17 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import * as Modal from "@utils/modal";
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, Menu, showToast, Toasts, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Menu, React, Slider, Text, showToast, Toasts, UserStore } from "@webpack/common";
 
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
 const ChannelActions = findByPropsLazy("selectVoiceChannel");
 
 const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
+const MIN_TIMER_MINUTES = 1;
+const MAX_TIMER_MINUTES = 240;
 
 let disconnectTimeout: NodeJS.Timeout | null = null;
 let scheduledAt = 0;
@@ -92,26 +94,9 @@ function scheduleDisconnect(delayMs: number, label: string) {
     showToast(`Deconnexion planifiee dans ${label}`, Toasts.Type.SUCCESS);
 }
 
-function scheduleFromPrompt(unit: "minutes" | "heures") {
-    const raw = window.prompt(
-        unit === "minutes"
-            ? "Entrez la duree en minutes"
-            : "Entrez la duree en heures"
-    );
-
-    if (!raw) return;
-
-    const value = Number(raw.replace(",", "."));
-    if (!Number.isFinite(value) || value <= 0) {
-        showToast("Valeur invalide", Toasts.Type.FAILURE);
-        return;
-    }
-
-    if (unit === "minutes") {
-        scheduleDisconnect(Math.round(value * MINUTE_MS), `${value} minute(s)`);
-    } else {
-        scheduleDisconnect(Math.round(value * HOUR_MS), `${value} heure(s)`);
-    }
+function scheduleDisconnectMinutes(minutes: number) {
+    const roundedMinutes = Math.round(minutes);
+    scheduleDisconnect(roundedMinutes * MINUTE_MS, `${roundedMinutes} minute(s)`);
 }
 
 function getRemainingSeconds(): number {
@@ -119,6 +104,76 @@ function getRemainingSeconds(): number {
 
     const remainingMs = Math.max(0, scheduledAt + scheduledForMs - Date.now());
     return Math.ceil(remainingMs / 1000);
+}
+
+function getRemainingMinutes(): number {
+    const remainingSeconds = getRemainingSeconds();
+    return remainingSeconds > 0 ? Math.ceil(remainingSeconds / 60) : 0;
+}
+
+type SleepTimerModalProps = Modal.ModalProps & {
+    defaultMinutes: number;
+    onClose: () => void;
+};
+
+const SleepTimerModal = ({ defaultMinutes, onClose, ...props }: SleepTimerModalProps) => {
+    const [minutes, setMinutes] = React.useState(defaultMinutes);
+
+    return (
+        <Modal.ModalRoot {...props}>
+            <Modal.ModalHeader separator={false}>
+                <Text variant="heading-lg/semibold">AntiSleepcall</Text>
+            </Modal.ModalHeader>
+            <Modal.ModalContent>
+                <Text variant="text-md/normal" style={{ marginBottom: "12px" }}>
+                    Regle la duree avant la deconnexion automatique (en minutes).
+                </Text>
+                <div style={{ padding: "0 8px 4px" }}>
+                    <Slider
+                        onValueChange={(value: number) => setMinutes(Math.round(value))}
+                        initialValue={minutes}
+                        minValue={MIN_TIMER_MINUTES}
+                        maxValue={MAX_TIMER_MINUTES}
+                        markers={[1, 15, 30, 60, 120, 180, 240]}
+                        onValueRender={(value: number) => `${Math.round(value)} min`}
+                    />
+                </div>
+                <Text variant="text-sm/normal" style={{ marginTop: "8px", opacity: 0.9 }}>
+                    Valeur actuelle: {minutes} minute(s)
+                </Text>
+            </Modal.ModalContent>
+            <Modal.ModalFooter>
+                <Button
+                    color={Button.Colors.BRAND}
+                    onClick={() => {
+                        scheduleDisconnectMinutes(minutes);
+                        onClose();
+                    }}
+                >
+                    Planifier
+                </Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    onClick={onClose}
+                >
+                    Annuler
+                </Button>
+            </Modal.ModalFooter>
+        </Modal.ModalRoot>
+    );
+};
+
+function openSleepTimerModal() {
+    const activeTimerMinutes = getRemainingMinutes();
+    const defaultMinutes = activeTimerMinutes > 0 ? activeTimerMinutes : 30;
+
+    Modal.openModal((props: any) => (
+        <SleepTimerModal
+            {...props}
+            defaultMinutes={defaultMinutes}
+            onClose={props.onClose}
+        />
+    ));
 }
 
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children: any[], { user }: { user: any; }) => {
@@ -131,34 +186,11 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children: any[], { us
     group.push(
         <Menu.MenuSeparator key="anti-sleepcall-separator" />,
         <Menu.MenuItem
-            id="anti-sleepcall-10m"
-            label="AntiSleepcall: Deconnexion dans 10 min"
-            action={() => scheduleDisconnect(10 * MINUTE_MS, "10 minutes")}
-        />,
-        <Menu.MenuItem
-            id="anti-sleepcall-30m"
-            label="AntiSleepcall: Deconnexion dans 30 min"
-            action={() => scheduleDisconnect(30 * MINUTE_MS, "30 minutes")}
-        />,
-        <Menu.MenuItem
-            id="anti-sleepcall-1h"
-            label="AntiSleepcall: Deconnexion dans 1 h"
-            action={() => scheduleDisconnect(1 * HOUR_MS, "1 heure")}
-        />,
-        <Menu.MenuItem
-            id="anti-sleepcall-2h"
-            label="AntiSleepcall: Deconnexion dans 2 h"
-            action={() => scheduleDisconnect(2 * HOUR_MS, "2 heures")}
-        />,
-        <Menu.MenuItem
-            id="anti-sleepcall-custom-min"
-            label="AntiSleepcall: Duree perso (minutes)"
-            action={() => scheduleFromPrompt("minutes")}
-        />,
-        <Menu.MenuItem
-            id="anti-sleepcall-custom-hour"
-            label="AntiSleepcall: Duree perso (heures)"
-            action={() => scheduleFromPrompt("heures")}
+            id="anti-sleepcall-slider"
+            label={remainingSeconds > 0
+                ? `AntiSleepcall: Regler le timer (${Math.ceil(remainingSeconds / 60)} min restantes)`
+                : "AntiSleepcall: Regler le timer (minutes)"}
+            action={openSleepTimerModal}
         />,
         <Menu.MenuItem
             id="anti-sleepcall-cancel"
