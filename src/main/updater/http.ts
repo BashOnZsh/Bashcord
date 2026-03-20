@@ -30,27 +30,58 @@ import { ASAR_FILE, serializeErrors } from "./common";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
-let PendingReleaseId: number | null = null;
+let PendingAssetSignature: string | null = null;
+let PendingAsarFileName: string | null = null;
 const UPDATER_STATE_FILE = join(app.getPath("userData"), "updater-state.json");
 
-function getLastAppliedReleaseId(): number | null {
+function getRuntimeAsarFileName(): string | null {
+    const normalizedDir = __dirname.replace(/\\/g, "/");
+    const match = normalizedDir.match(/\/([^/]+\.asar)(?:\/|$)/i);
+    return match?.[1] ?? null;
+}
+
+function getAsarCandidates(): string[] {
+    const runtimeName = getRuntimeAsarFileName();
+    const names = [runtimeName, ASAR_FILE];
+
+    if (ASAR_FILE === "equibop.asar" || runtimeName === "equibop.asar") {
+        names.push("bashbop.asar");
+    }
+
+    if (runtimeName === "bashbop.asar") {
+        names.push("equibop.asar");
+    }
+
+    // Keep order and remove null/duplicates.
+    return [...new Set(names.filter(Boolean) as string[])];
+}
+
+function getLastAppliedAssetSignature(): string | null {
     try {
         if (!existsSync(UPDATER_STATE_FILE)) return null;
         const raw = readFileSync(UPDATER_STATE_FILE, "utf8");
         const parsed = JSON.parse(raw);
-        const id = Number(parsed?.lastAppliedReleaseId);
-        return Number.isFinite(id) && id > 0 ? id : null;
+        const sig = String(parsed?.lastAppliedAssetSignature ?? "").trim();
+        return sig.length > 0 ? sig : null;
     } catch {
         return null;
     }
 }
 
-function setLastAppliedReleaseId(id: number) {
+function setLastAppliedAssetSignature(signature: string) {
     try {
-        writeFileSync(UPDATER_STATE_FILE, JSON.stringify({ lastAppliedReleaseId: id }), { flush: true });
+        writeFileSync(UPDATER_STATE_FILE, JSON.stringify({ lastAppliedAssetSignature: signature }), { flush: true });
     } catch {
         // If state write fails, updater still works; we just lose loop protection persistence.
     }
+}
+
+function getAssetSignature(asset: any): string {
+    return [
+        String(asset?.id ?? ""),
+        String(asset?.updated_at ?? ""),
+        String(asset?.size ?? "")
+    ].join(":");
 }
 
 function extractCommitHash(releaseData: any): string | null {
@@ -97,14 +128,6 @@ async function calculateGitChanges() {
 
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
-    const latestReleaseId = Number(data?.id ?? 0);
-
-    if (Number.isFinite(latestReleaseId) && latestReleaseId > 0) {
-        const lastAppliedReleaseId = getLastAppliedReleaseId();
-        if (lastAppliedReleaseId === latestReleaseId) {
-            return false;
-        }
-    }
 
     const releaseHash = extractCommitHash(data);
     const currentHash = String(gitHash).toLowerCase();
@@ -113,13 +136,21 @@ async function fetchUpdates() {
     if (releaseHash && (currentHash === releaseHash || currentHash.startsWith(releaseHash)))
         return false;
 
-    const asset = data.assets.find(a => a.name === ASAR_FILE);
+    const asarCandidates = getAsarCandidates();
+    const asset = data.assets.find(a => asarCandidates.includes(a.name));
     if (!asset?.browser_download_url) {
-        throw new Error(`No release asset named ${ASAR_FILE} found in latest release`);
+        throw new Error(`No release asset found for ${asarCandidates.join(" / ")}`);
+    }
+
+    const assetSignature = getAssetSignature(asset);
+    const lastAppliedAssetSignature = getLastAppliedAssetSignature();
+    if (lastAppliedAssetSignature && assetSignature === lastAppliedAssetSignature) {
+        return false;
     }
 
     PendingUpdate = asset.browser_download_url;
-    PendingReleaseId = Number.isFinite(latestReleaseId) && latestReleaseId > 0 ? latestReleaseId : null;
+    PendingAssetSignature = assetSignature;
+    PendingAsarFileName = asset.name;
 
     return true;
 }
@@ -131,20 +162,23 @@ async function applyUpdates() {
 
     // __dirname points inside an asar path (e.g. .../desktop.asar/dist/main/updater).
     const normalizedDir = __dirname.replace(/\\/g, "/");
-    const marker = `/${ASAR_FILE}`;
+    const runtimeAsarName = getRuntimeAsarFileName();
+    const preferredAsarName = runtimeAsarName || PendingAsarFileName || ASAR_FILE;
+    const marker = `/${preferredAsarName}`;
     const markerIndex = normalizedDir.indexOf(marker);
     const asarPath = markerIndex >= 0
         ? __dirname.slice(0, markerIndex + marker.length)
-        : join(__dirname, "..", "..", ASAR_FILE);
+        : join(__dirname, "..", "..", preferredAsarName);
 
     writeFileSync(asarPath, data, { flush: true });
 
-    if (PendingReleaseId) {
-        setLastAppliedReleaseId(PendingReleaseId);
+    if (PendingAssetSignature) {
+        setLastAppliedAssetSignature(PendingAssetSignature);
     }
 
     PendingUpdate = null;
-    PendingReleaseId = null;
+    PendingAssetSignature = null;
+    PendingAsarFileName = null;
 
     return true;
 }
