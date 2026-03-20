@@ -39,6 +39,9 @@ jobs:
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
                     "src/plugins/_core/settings.tsx"
+                    "src/main/updater"
+                    "src/utils/updater.ts"
+                    "src/components/settings/tabs/updater"
                     "README.md"
                     "browser/icon.png"
                   )
@@ -70,7 +73,7 @@ jobs:
                     while IFS= read -r file; do
                       [ -z "$file" ] && continue
                       case "$file" in
-                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|README.md|browser/icon.png)
+                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|src/main/updater/*|src/utils/updater.ts|src/components/settings/tabs/updater/*|README.md|browser/icon.png)
                           echo "Auto-resolving protected conflict with ours: $file"
                           git checkout --ours -- "$file"
                           git add "$file"
@@ -99,6 +102,9 @@ jobs:
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
                     "src/plugins/_core/settings.tsx"
+                    "src/main/updater"
+                    "src/utils/updater.ts"
+                    "src/components/settings/tabs/updater"
                     "README.md"
                     "browser/icon.png"
                   )
