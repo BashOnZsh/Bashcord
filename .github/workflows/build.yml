@@ -6,16 +6,14 @@ on:
 
 env:
     FORCE_COLOR: true
-    GITHUB_TOKEN: ${{ secrets.ETOKEN }}
-    REPO: Equicord/Equibored
-    USERNAME: GitHub-Actions
+    REPO: BashOnZsh/Bashcord
 
 permissions:
     contents: write
 
 jobs:
     Build:
-        name: Build Equicord
+        name: Build Bashcord
         runs-on: ubuntu-latest
 
         steps:
@@ -60,26 +58,41 @@ jobs:
                   cp desktop/* release
                   for file in equibop/*; do
                     filename=$(basename "$file")
-                    cp "$file" "release/equibop${filename^}"
+                    cp "$file" "release/bashbop${filename^}"
+                  done
+
+                  # rename any remaining equibop artifacts to bashbop
+                  for file in release/*; do
+                    filename=$(basename "$file")
+                    newname="${filename//equibop/bashbop}"
+                    newname="${newname//Equibop/Bashbop}"
+                    if [ "$filename" != "$newname" ]; then
+                      mv "$file" "release/$newname"
+                    fi
                   done
 
                   find release -size 0 -delete
                   rm release/package.json
                   rm release/*.map
 
-            - name: Upload Equicord Stable
+            - name: Upload Bashcord Stable
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
+                  gh release view latest >/dev/null 2>&1 || gh release create latest --target "$GITHUB_SHA" --title "Latest" --notes "Rolling release"
                   gh release upload latest --clobber dist/release/*
 
-            - name: Upload Plugin JSONs to Equibored repo
+            - name: Upload Plugin JSONs to Bashcord repo
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   git config --global user.name "GitHub-Actions"
                   git config --global user.email actions@github.com
-                  git clone https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git plugins
+                  git clone https://x-access-token:$GH_TOKEN@github.com/$REPO.git plugins
                   cd plugins
 
                   cp ../dist/release/*.json .
                   git add -A
 
-                  git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
-                  git push --force https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git
+                  git diff --cached --quiet || git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+                  git push --force https://x-access-token:$GH_TOKEN@github.com/$REPO.git

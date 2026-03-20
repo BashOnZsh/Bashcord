@@ -1,0 +1,78 @@
+name: Sync Upstream Equicord
+
+on:
+    workflow_dispatch:
+    schedule:
+        - cron: "0 6 * * *" # tous les jours a 6h UTC
+
+permissions:
+    contents: write
+
+jobs:
+    sync:
+        name: Sync with upstream main
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout fork
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.SYNC_PAT }}
+
+            - name: Configure git user
+              run: |
+                  git config --global user.name "GitHub-Actions"
+                  git config --global user.email "actions@github.com"
+
+            - name: Add upstream remote
+              run: git remote add upstream https://github.com/Equicord/Equicord.git
+
+            - name: Fetch upstream
+              run: git fetch upstream
+
+            - name: Save protected files
+              run: |
+                  PROTECTED=(
+                    ".github/workflows"
+                    "src/userplugins"
+                    "src/equicordplugins/followVoiceUser"
+                    "src/plugins/_core/settings.tsx"
+                    "README.md"
+                    "browser/icon.png"
+                  )
+                  mkdir -p /tmp/protected
+                  for path in "${PROTECTED[@]}"; do
+                    if [ -e "$path" ]; then
+                      mkdir -p "/tmp/protected/$(dirname "$path")"
+                      cp -r "$path" "/tmp/protected/$path"
+                    fi
+                  done
+
+            - name: Reset to upstream main
+              run: |
+                  git checkout main
+                  git reset --hard upstream/main
+
+            - name: Restore protected files
+              run: |
+                  PROTECTED=(
+                    ".github/workflows"
+                    "src/userplugins"
+                    "src/equicordplugins/followVoiceUser"
+                    "src/plugins/_core/settings.tsx"
+                    "README.md"
+                    "browser/icon.png"
+                  )
+                  for path in "${PROTECTED[@]}"; do
+                    if [ -e "/tmp/protected/$path" ]; then
+                      rm -rf "$path"
+                      mkdir -p "$(dirname "$path")"
+                      cp -r "/tmp/protected/$path" "$path"
+                    fi
+                  done
+                  git add -A
+                  git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
+
+            - name: Push synced branch
+              run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main

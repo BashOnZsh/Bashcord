@@ -165,6 +165,13 @@ export default definePlugin({
                 match: /(\i)\.buildLayout\(\)(?=\.map)/,
                 replace: "$self.buildLayout($1)"
             }
+        },
+        {
+            find: "getWebUserSettingFromSection",
+            replacement: {
+                match: /new Map\(\[(?=\[.{0,10}\.ACCOUNT,.{0,10}\.ACCOUNT_PANEL)/,
+                replace: "new Map([...$self.getSettingsSectionMappings(),"
+            }
         }
     ],
 
@@ -211,8 +218,8 @@ export default definePlugin({
         const equicordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Equicord",
-                panelTitle: "Equicord Settings",
+                title: "Bashcord",
+                panelTitle: "Bashcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
@@ -266,7 +273,7 @@ export default definePlugin({
         const equicordSection: SettingsLayoutNode = {
             key: "equicord_section",
             type: LayoutTypes.SECTION,
-            useTitle: () => "Equicord Settings",
+            useTitle: () => "Bashcord Settings",
             buildLayout: () => equicordEntries
         };
 
