@@ -27,6 +27,8 @@ export let isOutdated = false;
 export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[];
+let checkForUpdatesPromise: Promise<boolean> | null = null;
+let updatePromise: Promise<boolean> | null = null;
 
 function isIgnorableUpdateChange(change: { author: string; message: string; }) {
     const isPluginSyncCommit = /^Plugins for https:\/\/github\.com\/.+\/commit\//i.test(change.message);
@@ -44,32 +46,56 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 }
 
 export async function checkForUpdates() {
-    const rawChanges = await Unwrap(VencordNative.updater.getUpdates());
-    changes = rawChanges.filter(c => !isIgnorableUpdateChange(c));
+    if (checkForUpdatesPromise) return checkForUpdatesPromise;
 
-    // we only want to check this for the git updater, not the http updater
-    if (!IS_STANDALONE) {
-        if (rawChanges.some(c => c.hash === gitHash)) {
-            isNewer = true;
-            return (isOutdated = false);
+    checkForUpdatesPromise = (async () => {
+        isNewer = false;
+
+        const rawChanges = await Unwrap(VencordNative.updater.getUpdates());
+        changes = rawChanges.filter(c => !isIgnorableUpdateChange(c));
+
+        // we only want to check this for the git updater, not the http updater
+        if (!IS_STANDALONE) {
+            if (rawChanges.some(c => c.hash === gitHash)) {
+                isNewer = true;
+                return (isOutdated = false);
+            }
         }
-    }
 
-    return (isOutdated = changes.length > 0);
+        return (isOutdated = changes.length > 0);
+    })();
+
+    try {
+        return await checkForUpdatesPromise;
+    } finally {
+        checkForUpdatesPromise = null;
+    }
 }
 
 export async function update() {
+    if (updatePromise) return updatePromise;
+
     if (!isOutdated) return true;
 
-    const res = await Unwrap(VencordNative.updater.update());
+    updatePromise = (async () => {
+        const res = await Unwrap(VencordNative.updater.update());
 
-    if (res) {
+        // Reset outdated flag regardless of result; false can happen if remote changed between checks.
         isOutdated = false;
-        if (!await Unwrap(VencordNative.updater.rebuild()))
-            throw new Error("The Build failed. Please try manually building the new update");
-    }
 
-    return res;
+        if (res) {
+            if (!await Unwrap(VencordNative.updater.rebuild()))
+                throw new Error("The Build failed. Please try manually building the new update");
+        }
+
+        return res;
+    })();
+
+    try {
+        return await updatePromise;
+    } finally {
+        updatePromise = null;
+    }
 }
 
 export const getRepo = () => Unwrap(VencordNative.updater.getRepo());

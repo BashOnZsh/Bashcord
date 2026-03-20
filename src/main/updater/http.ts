@@ -58,11 +58,15 @@ async function calculateGitChanges() {
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
 
-    const hash = data.name.slice(data.name.lastIndexOf(" ") + 1);
+    const hash = String(data?.name ?? "").slice(String(data?.name ?? "").lastIndexOf(" ") + 1);
     if (hash === gitHash)
         return false;
 
     const asset = data.assets.find(a => a.name === ASAR_FILE);
+    if (!asset?.browser_download_url) {
+        throw new Error(`No release asset named ${ASAR_FILE} found in latest release`);
+    }
+
     PendingUpdate = asset.browser_download_url;
 
     return true;
@@ -73,9 +77,13 @@ async function applyUpdates() {
 
     const data = await fetchBuffer(PendingUpdate);
 
-    // __dirname points inside the running asar tree; extract the asar file path.
-    const asarMatch = __dirname.match(new RegExp(`^(.*\\${ASAR_FILE})(?:\\/|$)`));
-    const asarPath = asarMatch?.[1] ?? join(__dirname, "..", "..", ASAR_FILE);
+    // __dirname points inside an asar path (e.g. .../desktop.asar/dist/main/updater).
+    const normalizedDir = __dirname.replace(/\\/g, "/");
+    const marker = `/${ASAR_FILE}`;
+    const markerIndex = normalizedDir.indexOf(marker);
+    const asarPath = markerIndex >= 0
+        ? __dirname.slice(0, markerIndex + marker.length)
+        : join(__dirname, "..", "..", ASAR_FILE);
 
     writeFileSync(asarPath, data, { flush: true });
 
