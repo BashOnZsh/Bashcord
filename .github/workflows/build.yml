@@ -60,7 +60,17 @@ jobs:
                   cp desktop/* release
                   for file in equibop/*; do
                     filename=$(basename "$file")
-                    cp "$file" "release/equibop${filename^}"
+                    cp "$file" "release/bashbop${filename^}"
+                  done
+
+                  # rename any remaining equibop artifacts to bashbop
+                  for file in release/*; do
+                    filename=$(basename "$file")
+                    newname="${filename//equibop/bashbop}"
+                    newname="${newname//Equibop/Bashbop}"
+                    if [ "$filename" != "$newname" ]; then
+                      mv "$file" "release/$newname"
+                    fi
                   done
 
                   find release -size 0 -delete
