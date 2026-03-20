@@ -3,14 +3,14 @@ name: Sync Upstream Equicord
 on:
     workflow_dispatch:
     schedule:
-        - cron: "0 6 * * *" # tous les jours a 6h UTC
+        - cron: "0 6 * * *" # tous les jours à 6h UTC
 
 permissions:
     contents: write
 
 jobs:
     sync:
-        name: Sync with upstream main
+        name: Rebase on upstream/main
         runs-on: ubuntu-latest
 
         steps:
@@ -33,6 +33,7 @@ jobs:
 
             - name: Save protected files
               run: |
+                  # Ajoute ici les fichiers/dossiers à protéger
                   PROTECTED=(
                     ".github/workflows"
                     "src/userplugins"
@@ -49,10 +50,47 @@ jobs:
                     fi
                   done
 
-            - name: Reset to upstream main
+            - name: Rebase on upstream/main
               run: |
+                  set -euo pipefail
                   git checkout main
-                  git reset --hard upstream/main
+
+                  rebase_status=0
+                  GIT_EDITOR=true git rebase upstream/main || rebase_status=$?
+
+                  while [ "$rebase_status" -ne 0 ]; do
+                    conflicted_files="$(git diff --name-only --diff-filter=U || true)"
+
+                    if [ -z "$conflicted_files" ]; then
+                      echo "Rebase failed without merge conflicts."
+                      exit "$rebase_status"
+                    fi
+
+                    unresolved=0
+                    while IFS= read -r file; do
+                      [ -z "$file" ] && continue
+                      case "$file" in
+                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|README.md|browser/icon.png)
+                          echo "Auto-resolving protected conflict with ours: $file"
+                          git checkout --ours -- "$file"
+                          git add "$file"
+                          ;;
+                        *)
+                          echo "Conflict on non-protected file: $file"
+                          unresolved=1
+                          ;;
+                      esac
+                    done <<< "$conflicted_files"
+
+                    if [ "$unresolved" -ne 0 ]; then
+                      echo "Found conflicts outside protected scope; manual resolution required."
+                      git status --short
+                      exit 1
+                    fi
+
+                    rebase_status=0
+                    GIT_EDITOR=true git rebase --continue || rebase_status=$?
+                  done
 
             - name: Restore protected files
               run: |
@@ -74,5 +112,5 @@ jobs:
                   git add -A
                   git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
 
-            - name: Push synced branch
+            - name: Push rebased branch
               run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
