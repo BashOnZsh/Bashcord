@@ -117,7 +117,7 @@ Bashcord/
 
 ### Plugins personnalisés
 
-Les plugins Bashcord sont situés dans `src/bashplugins/`. Chaque plugin suit la structure standard :
+Les plugins Bashcord sont situés dans `src/userplugins/`. Chaque plugin suit la structure standard :
 
 ```typescript
 import { definePluginSettings } from "@api/Settings";
