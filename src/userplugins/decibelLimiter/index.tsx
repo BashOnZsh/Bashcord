@@ -86,6 +86,7 @@ let removeConnectionListener: (() => void) | null = null;
 const statsUnsubscribers = new Map<string, () => void>();
 const restoreTimeouts = new Map<string, NodeJS.Timeout>();
 const rememberedVolumes = new Map<string, number>();
+const mutedTargets = new Map<string, { connection: AnyConnection; userId: string; }>();
 const lastTriggers = new Map<string, number>();
 
 function log(message: string) {
@@ -132,6 +133,13 @@ function extractInboundStats(payload: any): InboundStat[] {
         if (Array.isArray(candidate)) {
             return candidate as InboundStat[];
         }
+
+        if (candidate && typeof candidate === "object") {
+            const values = Object.values(candidate as Record<string, unknown>);
+            if (values.length && values.every(item => typeof item === "object" && item != null)) {
+                return values as InboundStat[];
+            }
+        }
     }
 
     return [];
@@ -171,6 +179,7 @@ function scheduleRestore(connection: AnyConnection, userId: string, key: string)
             console.error("[DecibelLimiter] Erreur restauration volume:", error);
         } finally {
             rememberedVolumes.delete(key);
+            mutedTargets.delete(key);
         }
     }, settings.store.muteDurationMs);
 
@@ -189,12 +198,16 @@ function shouldTrigger(key: string): boolean {
 
 function applyHardMute(connection: AnyConnection, userId: string, normalizedLevel: number) {
     if (!settings.store.enabled) return;
+    if (!connection.setLocalVolume) return;
 
     const key = getVolumeKey(connection, userId);
     if (!shouldTrigger(key)) return;
 
-    const currentVolume = getCurrentLocalVolume(connection, userId);
-    rememberedVolumes.set(key, currentVolume);
+    if (!rememberedVolumes.has(key)) {
+        const currentVolume = getCurrentLocalVolume(connection, userId);
+        rememberedVolumes.set(key, currentVolume);
+    }
+    mutedTargets.set(key, { connection, userId });
 
     try {
         connection.setLocalVolume?.(userId, 0);
@@ -318,7 +331,21 @@ function cleanup() {
     }
     restoreTimeouts.clear();
 
+    // Restaurer immediatement les volumes encore coupes si le plugin s'arrete.
+    for (const [key, remembered] of rememberedVolumes) {
+        const target = mutedTargets.get(key);
+        if (!target) continue;
+
+        try {
+            target.connection.setLocalVolume?.(target.userId, remembered);
+            log(`Restauration stop plugin pour ${target.userId}: ${remembered}`);
+        } catch (error) {
+            console.error(`[DecibelLimiter] Erreur restauration stop (${target.userId}):`, error);
+        }
+    }
+
     rememberedVolumes.clear();
+    mutedTargets.clear();
     lastTriggers.clear();
     mediaEngine = null;
 }
