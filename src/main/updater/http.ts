@@ -31,6 +31,24 @@ import { ASAR_FILE, serializeErrors } from "./common";
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
 
+function extractCommitHash(releaseData: any): string | null {
+    const hashPattern = /\b[0-9a-f]{7,40}\b/i;
+    const candidates = [
+        String(releaseData?.name ?? ""),
+        String(releaseData?.body ?? ""),
+        String(releaseData?.target_commitish ?? "")
+    ];
+
+    for (const candidate of candidates) {
+        const match = candidate.match(hashPattern);
+        if (match?.[0]) {
+            return match[0].toLowerCase();
+        }
+    }
+
+    return null;
+}
+
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
         headers: {
@@ -58,8 +76,11 @@ async function calculateGitChanges() {
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
 
-    const hash = String(data?.name ?? "").slice(String(data?.name ?? "").lastIndexOf(" ") + 1);
-    if (hash === gitHash)
+    const releaseHash = extractCommitHash(data);
+    const currentHash = String(gitHash).toLowerCase();
+
+    // If release metadata provides a commit hash and we already run it, do not re-offer update.
+    if (releaseHash && (currentHash === releaseHash || currentHash.startsWith(releaseHash)))
         return false;
 
     const asset = data.assets.find(a => a.name === ASAR_FILE);
