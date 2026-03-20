@@ -19,8 +19,8 @@
 import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
-import { ipcMain } from "electron";
-import { writeFileSync } from "original-fs";
+import { app, ipcMain } from "electron";
+import { existsSync, readFileSync, writeFileSync } from "original-fs";
 import { join } from "path";
 
 import gitHash from "~git-hash";
@@ -30,6 +30,28 @@ import { ASAR_FILE, serializeErrors } from "./common";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
+let PendingReleaseId: number | null = null;
+const UPDATER_STATE_FILE = join(app.getPath("userData"), "updater-state.json");
+
+function getLastAppliedReleaseId(): number | null {
+    try {
+        if (!existsSync(UPDATER_STATE_FILE)) return null;
+        const raw = readFileSync(UPDATER_STATE_FILE, "utf8");
+        const parsed = JSON.parse(raw);
+        const id = Number(parsed?.lastAppliedReleaseId);
+        return Number.isFinite(id) && id > 0 ? id : null;
+    } catch {
+        return null;
+    }
+}
+
+function setLastAppliedReleaseId(id: number) {
+    try {
+        writeFileSync(UPDATER_STATE_FILE, JSON.stringify({ lastAppliedReleaseId: id }), { flush: true });
+    } catch {
+        // If state write fails, updater still works; we just lose loop protection persistence.
+    }
+}
 
 function extractCommitHash(releaseData: any): string | null {
     const hashPattern = /\b[0-9a-f]{7,40}\b/i;
@@ -75,6 +97,14 @@ async function calculateGitChanges() {
 
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
+    const latestReleaseId = Number(data?.id ?? 0);
+
+    if (Number.isFinite(latestReleaseId) && latestReleaseId > 0) {
+        const lastAppliedReleaseId = getLastAppliedReleaseId();
+        if (lastAppliedReleaseId === latestReleaseId) {
+            return false;
+        }
+    }
 
     const releaseHash = extractCommitHash(data);
     const currentHash = String(gitHash).toLowerCase();
@@ -89,6 +119,7 @@ async function fetchUpdates() {
     }
 
     PendingUpdate = asset.browser_download_url;
+    PendingReleaseId = Number.isFinite(latestReleaseId) && latestReleaseId > 0 ? latestReleaseId : null;
 
     return true;
 }
@@ -108,7 +139,12 @@ async function applyUpdates() {
 
     writeFileSync(asarPath, data, { flush: true });
 
+    if (PendingReleaseId) {
+        setLastAppliedReleaseId(PendingReleaseId);
+    }
+
     PendingUpdate = null;
+    PendingReleaseId = null;
 
     return true;
 }
