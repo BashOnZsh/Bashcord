@@ -102,6 +102,24 @@ function extractCommitHash(releaseData: any): string | null {
     return null;
 }
 
+function extractCommitHash(releaseData: any): string | null {
+    const hashPattern = /\b[0-9a-f]{7,40}\b/i;
+    const candidates = [
+        String(releaseData?.name ?? ""),
+        String(releaseData?.body ?? ""),
+        String(releaseData?.target_commitish ?? "")
+    ];
+
+    for (const candidate of candidates) {
+        const match = candidate.match(hashPattern);
+        if (match?.[0]) {
+            return match[0].toLowerCase();
+        }
+    }
+
+    return null;
+}
+
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
         headers: {
