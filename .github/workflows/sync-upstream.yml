@@ -44,6 +44,9 @@ jobs:
                     "src/components/settings/tabs/updater"
                     "README.md"
                     "browser/icon.png"
+                    "plugins.json"
+                    "vencordplugins.json"
+                    "equicordplugins.json"
                   )
                   mkdir -p /tmp/protected
                   for path in "${PROTECTED[@]}"; do
@@ -73,7 +76,7 @@ jobs:
                     while IFS= read -r file; do
                       [ -z "$file" ] && continue
                       case "$file" in
-                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|src/main/updater/*|src/utils/updater.ts|src/components/settings/tabs/updater/*|README.md|browser/icon.png)
+                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|src/main/updater/*|src/utils/updater.ts|src/components/settings/tabs/updater/*|README.md|browser/icon.png|plugins.json|vencordplugins.json|equicordplugins.json)
                           echo "Auto-resolving protected conflict with ours: $file"
                           git checkout --ours -- "$file"
                           git add "$file"
@@ -107,6 +110,9 @@ jobs:
                     "src/components/settings/tabs/updater"
                     "README.md"
                     "browser/icon.png"
+                    "plugins.json"
+                    "vencordplugins.json"
+                    "equicordplugins.json"
                   )
                   for path in "${PROTECTED[@]}"; do
                     if [ -e "/tmp/protected/$path" ]; then
