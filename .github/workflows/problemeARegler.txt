@@ -1,9 +1,0 @@
-The job failed due to unresolved merge conflicts during a rebase in the Sync Upstream Equicord workflow. The files with conflicts include:
-
-.github/workflows/build.yml
-.github/workflows/sync-upstream.yml
-README.md
-src/userplugins/doubleClickAntiLog/index.tsx
-plugins.json
-vencordplugins.json
-Most conflicts occurred on protected files that the workflow attempts to auto-resolve using the "ours" strategy. However, other files (like plugins.json, vencordplugins.json) are not handled by this auto-resolving logic ("protected files"), requiring manual intervention.
