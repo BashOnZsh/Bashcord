@@ -1,12 +1,42 @@
 // @ts-nocheck
 import definePlugin from "@utils/types";
 import { showNotification } from "@api/Notifications";
-import { findStoreLazy } from "@webpack";
 import { UserStore, SelectedChannelStore, GuildMemberStore } from "@webpack/common";
 
-const VoiceStateStore = findStoreLazy("VoiceStateStore");
+const MAX_LOGS = 300;
 
 let logs = [];
+
+function copyToClipboard(text) {
+    const nativeClipboard = globalThis?.DiscordNative?.clipboard;
+    if (nativeClipboard?.copy) {
+        nativeClipboard.copy(text);
+        return Promise.resolve();
+    }
+
+    if (navigator?.clipboard?.writeText) {
+        return navigator.clipboard.writeText(text);
+    }
+
+    return Promise.reject(new Error("Clipboard API unavailable"));
+}
+
+function getAvatarUrl(user, size) {
+    if (!user?.getAvatarURL) {
+        return "https://cdn.discordapp.com/embed/avatars/0.png";
+    }
+    return user.getAvatarURL(null, size) || "https://cdn.discordapp.com/embed/avatars/0.png";
+}
+
+function formatTimestamp() {
+    return new Date().toLocaleString([], {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
 
 function buildUI() {
     const existing = document.getElementById("vc-logger-overlay");
@@ -41,7 +71,7 @@ function buildUI() {
         borderBottom: "1px solid var(--background-modifier-accent)",
         backgroundColor: "var(--background-secondary)"
     });
-    
+
     const title = document.createElement("h2");
     title.innerText = `VC Logs (${logs.length})`;
     Object.assign(title.style, { flex: "1", margin: "0", fontSize: "20px", fontWeight: "bold", color: "white" });
@@ -59,8 +89,8 @@ function buildUI() {
 
     const copyAllBtn = createBtn(
         '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>',
-        "Copy All", "white", 
-        () => {
+        "Copy All", "white",
+        async () => {
             if (logs.length === 0) {
                 showNotification({
                     title: "Error",
@@ -69,16 +99,25 @@ function buildUI() {
                 });
                 return;
             }
+
             const text = logs.map(l => `Display: ${l.displayName}\nUsername: ${l.username}\nID: ${l.userId}\nTime: ${l.time}\n------------------`).join("\n");
-            DiscordNative.clipboard.copy(text);
-            showNotification({ title: "Success", body: "Copied all logs!", color: "#43b581" });
+            try {
+                await copyToClipboard(text);
+                showNotification({ title: "Success", body: "Copied all logs!", color: "#43b581" });
+            } catch {
+                showNotification({ title: "Error", body: "Unable to copy logs", color: "#ed4245" });
+            }
         }
     );
 
     const clearBtn = createBtn(
         '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M15 3.999V2H9v1.999H3V5.5h18V3.999h-6zM5 6.999v13C5 21.103 6.897 23 7.999 23h8c1.103 0 3-1.897 3-3.001v-13H5zm4.001 11H8.002v-7h.999v7zm3.001 0h-.999v-7h.999v7zm2.999 0h-1v-7h1v7z" /></svg>',
         "Clear Logs", "var(--status-danger)",
-        () => { logs = []; backdrop.remove(); buildUI(); }
+        () => {
+            logs = [];
+            backdrop.remove();
+            buildUI();
+        }
     );
 
     const closeBtn = createBtn(
@@ -97,7 +136,7 @@ function buildUI() {
     } else {
         logs.forEach(log => {
             const user = UserStore.getUser(log.userId);
-            const avatarUrl = user ? user.getAvatarURL(null, 40) : "https://cdn.discordapp.com/embed/avatars/0.png";
+            const avatarUrl = getAvatarUrl(user, 40);
 
             const row = document.createElement("div");
             Object.assign(row.style, {
@@ -107,27 +146,73 @@ function buildUI() {
                 userSelect: "text"
             });
 
-            row.innerHTML = `
-                <img src="${avatarUrl}" style="width: 36px; height: 36px; border-radius: 50%; user-select: none;">
-                <div style="flex: 1; overflow: hidden;">
-                    <div style="font-weight: 600; color: #FFFFFF; line-height: 1.2;">${log.displayName}</div>
-                    <div style="font-size: 12px; color: #B9BBBE; line-height: 1.2;">@${log.username}</div>
-                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; font-family: var(--font-code);">
-                        <span style="margin-right: 6px;">${log.userId}</span>
-                        <div id="copy-${log.userId}" style="cursor: pointer; color: var(--interactive-normal); opacity: 0.7; display: flex;" title="Copy ID">
-                            <svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>
-                        </div>
-                    </div>
-                </div>
-                <div style="font-size: 11px; color: var(--text-muted); white-space: nowrap; user-select: none;">${log.time}</div>
-            `;
+            const avatar = document.createElement("img");
+            avatar.src = avatarUrl;
+            Object.assign(avatar.style, {
+                width: "36px",
+                height: "36px",
+                borderRadius: "50%",
+                userSelect: "none"
+            });
 
-            const copyBtn = row.querySelector(`#copy-${log.userId}`);
+            const main = document.createElement("div");
+            Object.assign(main.style, { flex: "1", overflow: "hidden" });
+
+            const displayNameEl = document.createElement("div");
+            displayNameEl.textContent = log.displayName;
+            Object.assign(displayNameEl.style, { fontWeight: "600", color: "#FFFFFF", lineHeight: "1.2" });
+
+            const usernameEl = document.createElement("div");
+            usernameEl.textContent = `@${log.username}`;
+            Object.assign(usernameEl.style, { fontSize: "12px", color: "#B9BBBE", lineHeight: "1.2" });
+
+            const idLine = document.createElement("div");
+            Object.assign(idLine.style, {
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+                display: "flex",
+                alignItems: "center",
+                fontFamily: "var(--font-code)"
+            });
+
+            const idText = document.createElement("span");
+            idText.textContent = log.userId;
+            idText.style.marginRight = "6px";
+
+            const copyBtn = document.createElement("div");
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>';
+            copyBtn.title = "Copy ID";
+            Object.assign(copyBtn.style, {
+                cursor: "pointer",
+                color: "var(--interactive-normal)",
+                opacity: "0.7",
+                display: "flex"
+            });
+
+            idLine.append(idText, copyBtn);
+            main.append(displayNameEl, usernameEl, idLine);
+
+            const timeEl = document.createElement("div");
+            timeEl.textContent = log.time;
+            Object.assign(timeEl.style, {
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                whiteSpace: "nowrap",
+                userSelect: "none"
+            });
+
+            row.append(avatar, main, timeEl);
+
             if (copyBtn) {
-                copyBtn.onclick = (e) => {
+                copyBtn.onclick = async (e) => {
                     e.stopPropagation();
-                    DiscordNative.clipboard.copy(log.userId);
-                    showNotification({ title: "Copied", body: "User ID copied", color: "#43b581" });
+                    try {
+                        await copyToClipboard(log.userId);
+                        showNotification({ title: "Copied", body: "User ID copied", color: "#43b581" });
+                    } catch {
+                        showNotification({ title: "Error", body: "Unable to copy user ID", color: "#ed4245" });
+                    }
                 };
             }
             list.appendChild(row);
@@ -147,7 +232,7 @@ function injectToolbarButton() {
 
     const btn = document.createElement("div");
     btn.id = "vc-logger-btn";
-    btn.className = inboxIcon.className; 
+    btn.className = inboxIcon.className;
     btn.setAttribute("role", "button");
     btn.setAttribute("aria-label", "VC Logger");
     btn.setAttribute("tabindex", "0");
@@ -164,12 +249,13 @@ function injectToolbarButton() {
         buildUI();
     };
 
+    if (!inboxIcon.parentElement) return;
     inboxIcon.parentElement.insertBefore(btn, inboxIcon);
 }
 
 function addLog(userId, guildId) {
     const user = UserStore.getUser(userId);
-    if (!user) return; 
+    if (!user) return;
 
     const member = GuildMemberStore.getMember(guildId, userId);
     const displayName = member?.nick || user.globalName || user.username;
@@ -178,30 +264,28 @@ function addLog(userId, guildId) {
         userId,
         username: user.username,
         displayName: displayName,
-        time: new Date().toLocaleString([], { 
-            year: 'numeric', 
-            month: 'numeric', 
-            day: 'numeric', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        })
+        time: formatTimestamp()
     });
-    
+
+    if (logs.length > MAX_LOGS) {
+        logs.length = MAX_LOGS;
+    }
+
     if (document.getElementById("vc-logger-overlay")) {
-        buildUI(); 
+        buildUI();
     }
 
     showNotification({
         title: "User Logged",
         body: `${displayName} joined`,
         color: "#43b581",
-        icon: user.getAvatarURL(null, 64)
+        icon: getAvatarUrl(user, 64)
     });
 }
 
 export default definePlugin({
     name: "VCJoinLogger",
-    description: "Logs users who join the voice channel (you must be in a voice channel before someone joins so it works ).",
+    description: "Logs users who join your current voice channel.",
     authors: [{ name: "SAMURAI", id: 1400403728552431698n }],
 
     flux: {
@@ -224,21 +308,21 @@ export default definePlugin({
                 injectToolbarButton();
             }
         });
-        
+
         this.observer.observe(document.body, { childList: true, subtree: true });
-        
+
         injectToolbarButton();
     },
 
-    stop() { 
+    stop() {
         this.observer?.disconnect();
-        
+
         const btn = document.getElementById("vc-logger-btn");
         if (btn) btn.remove();
-        
+
         const ui = document.getElementById("vc-logger-overlay");
         if (ui) ui.remove();
-        
-        logs = []; 
+
+        logs = [];
     }
 });
