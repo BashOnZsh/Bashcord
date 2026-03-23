@@ -81,6 +81,7 @@ export function Updatable(props: CommonProps) {
         <>
             <Flex className={Margins.bottom8} gap="8px">
                 <Button
+                    size="small"
                     disabled={isUpdating || isChecking}
                     onClick={runWithDispatch(setIsChecking, async () => {
                         const outdated = await checkForUpdates();

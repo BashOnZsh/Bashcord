@@ -67,9 +67,41 @@ async function calculateGitChanges() {
     }) : [];
 }
 
+async function getUnmergedFiles() {
+    const res = await git("diff", "--name-only", "--diff-filter=U");
+    return res.stdout.trim()
+        ? res.stdout.trim().split("\n").map(s => s.trim()).filter(Boolean)
+        : [];
+}
+
+async function hasUncommittedChanges() {
+    const res = await git("status", "--porcelain");
+    return res.stdout.trim().length > 0;
+}
+
 async function pull() {
-    const res = await git("pull");
-    return res.stdout.includes("Fast-forward");
+    const unmergedFiles = await getUnmergedFiles();
+    if (unmergedFiles.length > 0) {
+        const listed = unmergedFiles.slice(0, 10).join(", ");
+        throw new Error(`Update blocked: unresolved merge conflicts detected (${listed}). Resolve them before updating.`);
+    }
+
+    const dirty = await hasUncommittedChanges();
+
+    try {
+        const res = dirty
+            ? await git("pull", "--rebase", "--autostash")
+            : await git("pull", "--rebase");
+
+        const out = `${res.stdout}\n${res.stderr}`;
+        return !out.includes("Already up to date") && !out.includes("Current branch main is up to date");
+    } catch (e: any) {
+        const out = `${e?.stdout ?? ""}\n${e?.stderr ?? ""}`;
+        if (out.includes("CONFLICT") || out.includes("unmerged files")) {
+            throw new Error("Update failed due to merge conflicts. Please resolve local git conflicts, then try again.");
+        }
+        throw e;
+    }
 }
 
 async function build() {
