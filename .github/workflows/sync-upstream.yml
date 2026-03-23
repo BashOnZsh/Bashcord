@@ -42,6 +42,7 @@ jobs:
                     "src/main/updater"
                     "src/utils/updater.ts"
                     "src/components/settings/tabs/updater"
+                    "src/components/settings/tabs/plugins"
                     "README.md"
                     "browser/icon.png"
                     "plugins.json"
@@ -77,7 +78,7 @@ jobs:
                     while IFS= read -r file; do
                       [ -z "$file" ] && continue
                       case "$file" in
-                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|src/main/updater/*|src/utils/updater.ts|src/components/settings/tabs/updater/*|README.md|browser/icon.png|plugins.json|vencordplugins.json|equicordplugins.json|devs.json)
+                        .github/workflows/*|src/userplugins/*|src/equicordplugins/followVoiceUser/*|src/plugins/_core/settings.tsx|src/main/updater/*|src/utils/updater.ts|src/components/settings/tabs/updater/*|src/components/settings/tabs/plugins/*|README.md|browser/icon.png|plugins.json|vencordplugins.json|equicordplugins.json|devs.json)
                           echo "Auto-resolving protected conflict with ours: $file"
                           git checkout --ours -- "$file"
                           git add "$file"
@@ -109,6 +110,7 @@ jobs:
                     "src/main/updater"
                     "src/utils/updater.ts"
                     "src/components/settings/tabs/updater"
+                    "src/components/settings/tabs/plugins"
                     "README.md"
                     "browser/icon.png"
                     "plugins.json"
