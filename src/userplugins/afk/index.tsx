@@ -33,6 +33,34 @@ const settings = definePluginSettings({
         description: "Message automatique envoye quand AFK est actif",
         default: "Je suis actuellement AFK, je te repondrai des que possible."
     },
+    secondReplyThreshold: {
+        type: OptionType.SLIDER,
+        description: "Seuil (nombre de messages recus) pour passer au 2e message AFK",
+        default: 2,
+        markers: [2, 3, 5, 10, 20],
+        minValue: 2,
+        maxValue: 50,
+        stickToMarkers: false
+    },
+    secondAutoReplyMessage: {
+        type: OptionType.STRING,
+        description: "Message AFK a partir du 2e seuil (laisser vide pour garder le message principal)",
+        default: "Je suis toujours AFK, je reviens vers toi des que possible."
+    },
+    thirdReplyThreshold: {
+        type: OptionType.SLIDER,
+        description: "Seuil (nombre de messages recus) pour passer au 3e message AFK",
+        default: 3,
+        markers: [3, 5, 10, 20, 30],
+        minValue: 3,
+        maxValue: 100,
+        stickToMarkers: false
+    },
+    thirdAutoReplyMessage: {
+        type: OptionType.STRING,
+        description: "Message AFK a partir du 3e seuil (laisser vide pour garder le niveau precedent)",
+        default: "Je suis encore AFK, merci pour ta patience."
+    },
     replyInDm: {
         type: OptionType.BOOLEAN,
         description: "Repondre automatiquement dans les DM",
@@ -47,6 +75,11 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Repondre en serveur uniquement si vous etes mentionne",
         default: true
+    },
+    muteConversationOnAutoReply: {
+        type: OptionType.BOOLEAN,
+        description: "Mettre automatiquement en sourdine la conversation apres reponse AFK",
+        default: false
     },
     cooldownMs: {
         type: OptionType.SLIDER,
@@ -66,6 +99,8 @@ const settings = definePluginSettings({
 
 let startTime = 0;
 const lastAutoReplyByChannel = new Map<string, number>();
+const receivedCountByChannel = new Map<string, number>();
+const mutedChannels = new Set<string>();
 const FORCED_BUTTON_ID = "vc-afk-forced-toggle";
 
 let domObserver: MutationObserver | null = null;
@@ -73,6 +108,13 @@ let domInterval: number | null = null;
 
 function toggleAfk() {
     settings.store.afkEnabled = !settings.store.afkEnabled;
+
+    if (settings.store.afkEnabled) {
+        startTime = Date.now();
+        lastAutoReplyByChannel.clear();
+        receivedCountByChannel.clear();
+        mutedChannels.clear();
+    }
 
     if (settings.store.showNotifications) {
         showNotification({
@@ -224,14 +266,62 @@ function isMentioningCurrentUser(message: any, currentUserId: string): boolean {
     return content.includes(`<@${currentUserId}>`) || content.includes(`<@!${currentUserId}>`);
 }
 
-async function sendAutoReply(channelId: string): Promise<void> {
-    const content = String(settings.store.autoReplyMessage ?? "").trim();
+function resolveAutoReplyContent(messageCount: number): string {
+    const first = String(settings.store.autoReplyMessage ?? "").trim();
+    const second = String(settings.store.secondAutoReplyMessage ?? "").trim();
+    const third = String(settings.store.thirdAutoReplyMessage ?? "").trim();
+
+    const secondThreshold = Math.max(2, Number(settings.store.secondReplyThreshold) || 2);
+    const rawThirdThreshold = Math.max(3, Number(settings.store.thirdReplyThreshold) || 3);
+    const thirdThreshold = Math.max(rawThirdThreshold, secondThreshold + 1);
+
+    if (messageCount >= thirdThreshold) {
+        if (third) return third;
+        if (second) return second;
+        return first;
+    }
+
+    if (messageCount >= secondThreshold) {
+        if (second) return second;
+        return first;
+    }
+
+    return first;
+}
+
+async function sendAutoReplyForCount(channelId: string, messageCount: number): Promise<void> {
+    const content = resolveAutoReplyContent(messageCount);
     if (!content) return;
 
     await RestAPI.post({
         url: Constants.Endpoints.MESSAGES(channelId),
         body: { content }
     });
+}
+
+function resolveChannelSettingsEndpoint(channelId: string): string {
+    const endpoints = (Constants as any)?.Endpoints;
+    const fn = endpoints?.USER_CHANNEL_SETTINGS;
+    if (typeof fn === "function") {
+        return fn(channelId);
+    }
+
+    // Fallback le plus courant pour les parametres de canal utilisateur.
+    return `/users/@me/channels/${channelId}`;
+}
+
+async function muteConversation(channelId: string): Promise<void> {
+    if (mutedChannels.has(channelId)) return;
+
+    const url = resolveChannelSettingsEndpoint(channelId);
+    await RestAPI.patch({
+        url,
+        body: {
+            muted: true
+        }
+    });
+
+    mutedChannels.add(channelId);
 }
 
 export default definePlugin({
@@ -262,11 +352,15 @@ export default definePlugin({
     start() {
         startTime = Date.now();
         lastAutoReplyByChannel.clear();
+        receivedCountByChannel.clear();
+        mutedChannels.clear();
         startForcedButtonInjection();
     },
 
     stop() {
         lastAutoReplyByChannel.clear();
+        receivedCountByChannel.clear();
+        mutedChannels.clear();
         stopForcedButtonInjection();
     },
 
@@ -291,6 +385,9 @@ export default definePlugin({
             const channelId = getMessageChannelId(message);
             if (!channelId) return;
 
+            const messageCount = (receivedCountByChannel.get(channelId) ?? 0) + 1;
+            receivedCountByChannel.set(channelId, messageCount);
+
             const channel = ChannelStore.getChannel(channelId);
             const channelType = channel?.type;
 
@@ -311,8 +408,16 @@ export default definePlugin({
             if (now - lastReplyAt < settings.store.cooldownMs) return;
 
             try {
-                await sendAutoReply(channelId);
+                await sendAutoReplyForCount(channelId, messageCount);
                 lastAutoReplyByChannel.set(channelId, now);
+
+                if (settings.store.muteConversationOnAutoReply) {
+                    try {
+                        await muteConversation(channelId);
+                    } catch (muteError) {
+                        console.warn("[Afk] Impossible de mettre la conversation en sourdine:", muteError);
+                    }
+                }
             } catch (error) {
                 console.error("[Afk] Erreur envoi reponse automatique:", error);
             }
