@@ -14,6 +14,10 @@ env:
 permissions:
     contents: write
 
+concurrency:
+  group: release-latest
+  cancel-in-progress: false
+
 jobs:
     Build:
         name: Build Equicord
