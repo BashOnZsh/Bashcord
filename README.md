@@ -18,8 +18,6 @@ Bashcord est une modification Discord qui combine la puissance d'Equicord avec d
 Bashcord inclut tous les plugins d'Equicord plus nos plugins exclusifs :
 
 #### Plugins Bashcord exclusifs
-- **SoundboardPro** - Table de mixage audio professionnelle
-- **VoiceMessageSender** - Envoi de messages vocaux depuis la barre de chat
 - **AutoDeco** - Déconnexion automatique
 - **AntiGroup** - Protection contre les groupes indésirables
 - **MessageCleaner** - Nettoyage automatique des messages
