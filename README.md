@@ -9,9 +9,8 @@ Bashcord est une modification Discord qui combine la puissance d'Equicord avec d
 ### ✨ Fonctionnalités exclusives
 
 - **🎤 Messages vocaux directs** - Bouton microphone intégré dans la barre de chat
-- **🎵 Soundboard Pro** - Table de mixage audio avancée avec sons personnalisés
 - **🔧 Plugins Bashcord** - Collection exclusive de plugins dans `src/userplugins/`
-- **🎨 Interface personnalisée** - Branding et thème Bashcord
+- **🎨 Interface personnalisée** - Branding et thème Vencord/Equicord
 - **🔄 Synchronisation automatique** - Mise à jour automatique avec Equicord
 
 ### 📦 Plugins inclus
