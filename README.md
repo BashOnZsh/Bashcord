@@ -146,7 +146,7 @@ Le branding Bashcord est géré dans :
 ### Synchronisation avec Equicord
 
 Bashcord se synchronise automatiquement avec les mises à jour d'Equicord via GitHub Actions tout en préservant :
-- Les plugins exclusifs dans `src/bashplugins/`
+- Les plugins exclusifs dans `src/userplugins/`
 - Le branding et l'interface personnalisée
 - Les workflows CI/CD personnalisés
 
