@@ -133,3 +133,13 @@ jobs:
 
             - name: Push rebased branch
               run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
+
+            - name: Trigger release rebuild
+              env:
+                  GH_TOKEN: ${{ secrets.SYNC_PAT }}
+              run: |
+                  gh api \
+                    --method POST \
+                    -H "Accept: application/vnd.github+json" \
+                    /repos/${{ github.repository }}/actions/workflows/build.yml/dispatches \
+                    -f ref=main
