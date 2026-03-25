@@ -163,10 +163,6 @@ Bashcord utilise un système de mise à jour automatique forcé qui :
 - ✅ **Vérifie périodiquement** toutes les 30 minutes pour rester à jour
 - ✅ **Indépendant des paramètres** : fonctionne même si autoUpdate est désactivé
 
-#### Pourquoi l'auto-update est forcé ?
-
-Quand Discord modifie son interface ou ses paramètres, cela peut bloquer l'accès aux paramètres de Bashcord, à l'updater, et aux plugins. Le système de mise à jour automatique forcé garantit que Bashcord reste toujours compatible et à jour, même dans ces cas.
-
 #### Fonctionnement selon le type d'installation
 
 **Pour les utilisateurs qui ont cloné le repo (Git)** :
@@ -184,17 +180,6 @@ Quand Discord modifie son interface ou ses paramètres, cela peut bloquer l'acc�
    - Remplacement automatique de l'ancien fichier
    - Notification à l'utilisateur avec option de redémarrer
    - Redémarrage manuel via la notification ou le menu Discord
-
-3. **Vérification continue** : Nouvelle vérification toutes les 30 minutes (pour les deux types)
-
-#### Personnalisation
-
-Bien que l'installation soit automatique, vous pouvez toujours :
-- Voir les détails des mises à jour dans **Settings → Bashcord Updater**
-- Vérifier manuellement via la commande `checkForUpdates` dans le Command Palette
-- Consulter les logs dans la console pour le débogage
-
-> **Note** : Le système fonctionne uniquement sur la version Desktop. La version Web et Browser Extension se mettent à jour via les méthodes standards.
 
 ## 🤝 Contribution
 
@@ -221,7 +206,7 @@ Ce projet est sous licence GPL-3.0-or-later. Voir le fichier [LICENSE](LICENSE) 
 
 - **[Vendicated](https://github.com/Vendicated)** - Créateur de [Vencord](https://github.com/Vendicated/Vencord)
 - **[Equicord](https://github.com/Equicord)** - Fork de Vencord avec des plugins supplémentaires
-- **[Suncord](https://github.com/verticalsync/Suncord)** - Inspiration et aide
+- **[Suncord](https://github.com/verticalsync/Suncord)** - Inspiration
 
 ## ⚠️ Avertissement
 
