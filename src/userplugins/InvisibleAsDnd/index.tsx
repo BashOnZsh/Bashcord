@@ -10,6 +10,41 @@ import { NotificationSettingsStore, PresenceStore, UserStore } from "@webpack/co
 
 let originalGetUserAgnosticState: typeof NotificationSettingsStore.getUserAgnosticState | null = null;
 let originalTaskbarFlashDescriptor: PropertyDescriptor | null = null;
+const originalSoundMethods = new Map<string, Function>();
+
+const SOUND_METHOD_CANDIDATES = [
+    "isSoundEnabled",
+    "isMessageSoundEnabled",
+    "isCallSoundsEnabled",
+    "isIncomingCallSoundEnabled",
+    "isNotificationSoundEnabled",
+    "shouldPlaySound"
+];
+
+function patchSoundMethods() {
+    const store = NotificationSettingsStore as any;
+
+    for (const methodName of SOUND_METHOD_CANDIDATES) {
+        const original = store[methodName];
+        if (typeof original !== "function" || originalSoundMethods.has(methodName)) continue;
+
+        originalSoundMethods.set(methodName, original);
+        store[methodName] = function (...args: any[]) {
+            if (isInvisible()) return false;
+            return original.apply(this, args);
+        };
+    }
+}
+
+function unpatchSoundMethods() {
+    const store = NotificationSettingsStore as any;
+
+    for (const [methodName, original] of originalSoundMethods) {
+        store[methodName] = original;
+    }
+
+    originalSoundMethods.clear();
+}
 
 function isInvisible(): boolean {
     const currentUser = UserStore.getCurrentUser();
@@ -30,9 +65,14 @@ export default definePlugin({
                 return {
                     ...state,
                     taskbarFlash: false,
+                    sound: false,
+                    callSound: false,
+                    disableAllSounds: true,
                 };
             };
         }
+
+        patchSoundMethods();
 
         if (originalTaskbarFlashDescriptor == null) {
             originalTaskbarFlashDescriptor = Object.getOwnPropertyDescriptor(NotificationSettingsStore, "taskbarFlash") ?? null;
@@ -52,6 +92,8 @@ export default definePlugin({
             NotificationSettingsStore.getUserAgnosticState = originalGetUserAgnosticState;
             originalGetUserAgnosticState = null;
         }
+
+        unpatchSoundMethods();
 
         if (originalTaskbarFlashDescriptor) {
             Object.defineProperty(NotificationSettingsStore, "taskbarFlash", originalTaskbarFlashDescriptor);
