@@ -25,9 +25,9 @@ import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
 
-const BASE_URL = "https://github.com/Equicord/Equilotl/releases/latest/download/";
-const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
-const INSTALLER_APP_DARWIN = "Equilotl.app";
+const BASE_URL = "https://github.com/BashOnZsh/Bashotl/releases/latest/download/";
+const INSTALLER_PATH_DARWIN = "Bashotl.app/Contents/MacOS/Bashotl";
+const INSTALLER_APP_DARWIN = "Bashotl.app";
 
 const BASE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILE_DIR = join(BASE_DIR, "dist", "Installer");
@@ -36,11 +36,11 @@ const ETAG_FILE = join(FILE_DIR, "etag.txt");
 function getFilename() {
     switch (process.platform) {
         case "win32":
-            return "EquilotlCli.exe";
+            return "BashotlCli.exe";
         case "darwin":
-            return "Equilotl.MacOS.zip";
+            return "Bashotl.MacOS.zip";
         case "linux":
-            return "EquilotlCli-linux";
+            return "BashotlCli-linux";
         default:
             throw new Error("Unsupported platform: " + process.platform);
     }
@@ -66,7 +66,7 @@ async function ensureBinary() {
 
     const res = await fetch(BASE_URL + filename, {
         headers: {
-            "User-Agent": "Equicord (https://github.com/Equicord/Equicord)",
+            "User-Agent": "Bashcord (https://github.com/BashOnZsh/Bashcord)",
             "If-None-Match": etag
         }
     });
@@ -76,7 +76,7 @@ async function ensureBinary() {
         return outputFile;
     }
     if (!res.ok)
-        throw new Error(`Failed to download installer: ${res.status} ${res.statusText}`);
+        throw new Error(`Failed to download Bashotl installer: ${res.status} ${res.statusText}`);
 
     writeFileSync(ETAG_FILE, res.headers.get("etag"));
 
@@ -116,7 +116,7 @@ async function ensureBinary() {
 
 const installerBin = await ensureBinary();
 
-console.log("Now running Installer...");
+console.log("Now running Bashotl installer...");
 
 const argStart = process.argv.indexOf("--");
 const args = argStart === -1 ? [] : process.argv.slice(argStart + 1);
@@ -126,6 +126,9 @@ try {
         stdio: "inherit",
         env: {
             ...process.env,
+            BASHCORD_USER_DATA_DIR: BASE_DIR,
+            BASHCORD_DIRECTORY: join(BASE_DIR, "dist/desktop"),
+            BASHCORD_DEV_INSTALL: "1",
             EQUICORD_USER_DATA_DIR: BASE_DIR,
             EQUICORD_DIRECTORY: join(BASE_DIR, "dist/desktop"),
             EQUICORD_DEV_INSTALL: "1"

@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Configuration
-INSTALLER_PATH="$HOME/.equilotl"
-GITHUB_URL="https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux"
+INSTALLER_PATH="$HOME/.bashotl"
+GITHUB_URL="https://github.com/BashOnZsh/Bashotl/releases/latest/download/BashotlCli-linux"
 PRIVILEGE_CMDS=("sudo" "doas")
 DEBUG=false
-LOG_FILE="$(dirname "$(realpath "$0")")/equicordinstalldebug.log"
+LOG_FILE="$(dirname "$(realpath "$0")")/bashcordinstalldebug.log"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,31 +38,31 @@ check_root() {
 
 # Download the installer
 download_installer() {
-    echo -e "${YELLOW}Downloading installer...${NC}"
+    echo -e "${YELLOW}Downloading Bashotl installer...${NC}"
     if ! curl -sSL "$GITHUB_URL" --output "$INSTALLER_PATH"; then
-        error "Failed to download installer from GitHub"
+        error "Failed to download Bashotl installer from GitHub"
     fi
-    chmod +x "$INSTALLER_PATH" || error "Failed to make installer executable"
+    chmod +x "$INSTALLER_PATH" || error "Failed to make Bashotl installer executable"
 }
 
 # Check if installer needs update
 check_for_updates() {
     if [ ! -f "$INSTALLER_PATH" ]; then
-        echo -e "${YELLOW}Installer not found. Downloading...${NC}"
+        echo -e "${YELLOW}Bashotl installer not found. Downloading...${NC}"
         download_installer
         return
     fi
 
     local latest_modified local_modified
     if ! latest_modified=$(curl -sI "$GITHUB_URL" | grep -i "last-modified" | cut -d' ' -f2-); then
-        echo -e "${YELLOW}Warning: Could not fetch last modified date from GitHub. Using existing installer.${NC}"
+        echo -e "${YELLOW}Warning: Could not fetch last modified date from GitHub. Using existing Bashotl installer.${NC}"
         return
     fi
 
     local_modified=$(stat -c "%y" "$INSTALLER_PATH" | cut -d' ' -f1-2) || error "Failed to get local modified date"
 
     if [ "$local_modified" != "$latest_modified" ]; then
-        echo -e "${YELLOW}Installer is outdated. Do you wish to update? [y/n]${NC}"
+        echo -e "${YELLOW}Bashotl installer is outdated. Do you wish to update? [y/n]${NC}"
         read -p "" -n 1 -r retval
 
         # Create a new line before printing our next notice, otherwise it will be printed on the same line
@@ -70,10 +70,10 @@ check_for_updates() {
         echo ""
         case "$retval" in
             y|Y ) download_installer;;
-            n|N ) echo -e "${YELLOW}Update cancelled. Running installer...${NC}" && return;;
+            n|N ) echo -e "${YELLOW}Update cancelled. Running Bashotl installer...${NC}" && return;;
         esac
     else
-        echo -e "${GREEN}Installer is up-to-date.${NC}"
+        echo -e "${GREEN}Bashotl installer is up-to-date.${NC}"
     fi
 }
 
@@ -105,19 +105,19 @@ main() {
     priv_cmd=$(find_privilege_cmd)
     debug_log "Using privilege command: $priv_cmd"
 
-    echo -e "${YELLOW}Running installer with $priv_cmd...${NC}"
-    debug_log "Executing installer: $priv_cmd $INSTALLER_PATH"
+    echo -e "${YELLOW}Running Bashotl installer with $priv_cmd...${NC}"
+    debug_log "Executing Bashotl installer: $priv_cmd $INSTALLER_PATH"
     if ! "$priv_cmd" "$INSTALLER_PATH"; then
-        debug_log "Installer failed"
-        error "Installer failed to run"
+        debug_log "Bashotl installer failed"
+        error "Bashotl installer failed to run"
     fi
 
     debug_log "Installation completed successfully"
     echo -e "\n${GREEN}Installation completed successfully!${NC}"
     echo -e "\nCredits:"
     echo "Original script forked from Vencord"
-    echo "Modified by PhoenixAceVFX for Equicord Updater"
-    echo "Rewrite by PhoenixAceVFX"
+    echo "Modified by Bash for Bashcord Updater"
+    echo "Rewrite by Bash"
 }
 
 # Pass arguments to main
