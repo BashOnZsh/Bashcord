@@ -17,16 +17,53 @@
 */
 
 import { app } from "electron";
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const suffix = IS_DEV ? "dev" : "";
 
-export const DATA_DIR = process.env.EQUICORD_USER_DATA_DIR ?? (
-    process.env.DISCORD_USER_DATA_DIR
-        ? join(process.env.DISCORD_USER_DATA_DIR, "..", "EquicordData", suffix)
-        : join(app.getPath("userData"), "..", "Equicord", suffix)
-);
+const customDataDir = process.env.BASHCORD_USER_DATA_DIR ?? process.env.DATA_DIR;
+const legacyCustomDataDir = process.env.EQUICORD_USER_DATA_DIR;
+const discordUserDataDir = process.env.DISCORD_USER_DATA_DIR;
+
+const DATA_PARENT_DIR = discordUserDataDir
+    ? join(discordUserDataDir, "..")
+    : join(app.getPath("userData"), "..");
+
+function copyDirContents(source: string, target: string) {
+    mkdirSync(target, { recursive: true });
+
+    for (const entry of readdirSync(source)) {
+        cpSync(join(source, entry), join(target, entry), {
+            recursive: true,
+            force: false,
+            errorOnExist: false
+        });
+    }
+}
+
+function migrateLegacyData(targetDir: string) {
+    const legacyDirs = [
+        join(DATA_PARENT_DIR, "Equicord", suffix),
+        join(DATA_PARENT_DIR, "EquicordData", suffix),
+        legacyCustomDataDir
+    ].filter(Boolean) as string[];
+
+    for (const legacyDir of legacyDirs) {
+        if (!existsSync(legacyDir) || legacyDir === targetDir) continue;
+
+        try {
+            copyDirContents(legacyDir, targetDir);
+            console.log(`[Bashcord] Migrated data from ${legacyDir} to ${targetDir}`);
+        } catch (err) {
+            console.error(`[Bashcord] Failed to migrate data from ${legacyDir}:`, err);
+        }
+    }
+}
+
+export const DATA_DIR = customDataDir ?? join(DATA_PARENT_DIR, discordUserDataDir ? "BashcordData" : "Bashcord", suffix);
+
+migrateLegacyData(DATA_DIR);
 
 export const SETTINGS_DIR = join(DATA_DIR, "settings");
 export const THEMES_DIR = join(DATA_DIR, "themes");

@@ -44,12 +44,12 @@ function getAsarCandidates(): string[] {
     const runtimeName = getRuntimeAsarFileName();
     const names = [runtimeName, ASAR_FILE];
 
-    if (ASAR_FILE === "equibop.asar" || runtimeName === "equibop.asar") {
-        names.push("bashbop.asar");
+    if (ASAR_FILE === "bashbop.asar" || runtimeName === "bashbop.asar") {
+        names.push("equibop.asar");
     }
 
-    if (runtimeName === "bashbop.asar") {
-        names.push("equibop.asar");
+    if (runtimeName === "equibop.asar") {
+        names.push("bashbop.asar");
     }
 
     // Keep order and remove null/duplicates.
