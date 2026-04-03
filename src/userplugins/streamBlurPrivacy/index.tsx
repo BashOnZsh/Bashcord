@@ -5,9 +5,10 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings } from "@api/Settings";
-import { showNotification } from "@api/Notifications";
 import * as DataStore from "@api/DataStore";
+import { showNotification } from "@api/Notifications";
+import { definePluginSettings } from "@api/Settings";
+import { getCurrentChannel } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
 import { FluxDispatcher, Menu, UserStore } from "@webpack/common";
@@ -100,8 +101,8 @@ function inspectMessageDOM(): void {
 			if (elements.length > 0) {
 				console.log(`[StreamBlurPrivacy] Selector "${selector}" found ${elements.length} elements`);
 				const el = elements[0] as HTMLElement;
-				console.log(`  - First element classes:`, el.className);
-				console.log(`  - First element HTML preview:`, el.innerHTML?.substring(0, 150));
+				console.log("  - First element classes:", el.className);
+				console.log("  - First element HTML preview:", el.innerHTML?.substring(0, 150));
 			}
 		}
 
@@ -338,10 +339,24 @@ async function toggleChannelBlur(channelId: string, channelName: string): Promis
 	}
 }
 
-// Ajoute l'option "Stream blur: ON/OFF" au menu contextuel des conversations privées
-const GDMContextMenuPatch: NavContextMenuPatchCallback = (children: any, { channel }: { channel: Channel }) => {
-	if (!channel || (channel.type !== 1 && channel.type !== 3)) {
-		// 1 = DM (conversation privée), 3 = GROUP_DM (groupe privé)
+function getBlurTargetChannel(props: { channel?: Channel; user?: { id: string; username?: string; discriminator?: string; }; }): Channel | null {
+	if (props.channel && (props.channel.type === 1 || props.channel.type === 3)) {
+		return props.channel;
+	}
+
+	const currentChannel = getCurrentChannel?.();
+	if (currentChannel && (currentChannel.type === 1 || currentChannel.type === 3)) {
+		return currentChannel as Channel;
+	}
+
+	return null;
+}
+
+// Ajoute l'option "Stream blur: ON/OFF" aux menus des conversations privées et des utilisateurs liés à un DM
+const GDMContextMenuPatch: NavContextMenuPatchCallback = (children: any, props: { channel?: Channel; user?: { id: string; username?: string; discriminator?: string; }; }) => {
+	const channel = getBlurTargetChannel(props);
+
+	if (!channel) {
 		return;
 	}
 
@@ -349,7 +364,7 @@ const GDMContextMenuPatch: NavContextMenuPatchCallback = (children: any, { chann
 		const isBlurred = blurredChannels.has(channel.id);
 		const channelName = channel.name || (channel.type === 1 ? "Direct Message" : "Group");
 
-		const group = findGroupChildrenByChildId("leave-channel", children);
+		const group = findGroupChildrenByChildId(["leave-channel", "close-dm"], children);
 
 		if (group) {
 			group.push(
@@ -384,7 +399,10 @@ export default definePlugin({
 	settings,
 
 	contextMenus: {
-		"gdm-context": GDMContextMenuPatch
+		"gdm-context": GDMContextMenuPatch,
+		"user-context": GDMContextMenuPatch,
+		"user-profile-actions": GDMContextMenuPatch,
+		"user-profile-overflow-menu": GDMContextMenuPatch
 	},
 
 	async start() {
