@@ -205,5 +205,5 @@ De plus, assurez-vous de ne pas publier de captures d'écran avec Bashcord dans 
 ---
 
 <div align="center">
-  <strong>Fait avec ❤️ par l'équipe Bashcord(Bash)</strong>
+  <strong>Fait avec ❤️ par l'équipe Bashcord (Bash) </strong>
 </div>
