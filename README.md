@@ -100,7 +100,7 @@ pnpm inject
 ```
 Bashcord/
 ├── src/
-│   ├── bashplugins/          # Plugins exclusifs Bashcord
+│   ├── userplugins/          # Plugins exclusifs Bashcord
 │   ├── equicordplugins/      # Plugins Equicord
 │   ├── plugins/              # Plugins Vencord
 │   ├── components/           # Composants UI personnalisés
@@ -134,13 +134,6 @@ export default definePlugin({
 });
 ```
 
-### Thème et branding
-
-Le branding Bashcord est géré dans :
-- `src/components/WelcomeModal.tsx` - Modal de bienvenue
-- `src/plugins/_core/settings.tsx` - Interface des paramètres
-- `src/Vencord.ts` - Initialisation et popup de bienvenue
-
 ## 🔄 Mise à jour automatique
 
 ### Synchronisation avec Equicord
@@ -149,19 +142,6 @@ Bashcord se synchronise automatiquement avec les mises à jour d'Equicord via Gi
 - Les plugins exclusifs dans `src/userplugins/`
 - Le branding et l'interface personnalisée
 - Les workflows CI/CD personnalisés
-
-### Mise à jour automatique client (Desktop)
-
-**⚠️ Important : Bashcord installe automatiquement les mises à jour pour garantir la compatibilité**
-
-Bashcord utilise un système de mise à jour automatique forcé qui :
-
-- ✅ **Vérifie les mises à jour au démarrage** de Discord
-- ✅ **Installe automatiquement** les nouvelles versions disponibles
-- ✅ **Rebuild automatique** après mise à jour
-- ✅ **Notification pour redémarrer** : vous pouvez redémarrer Discord manuellement ou via la notification
-- ✅ **Vérifie périodiquement** toutes les 30 minutes pour rester à jour
-- ✅ **Indépendant des paramètres** : fonctionne même si autoUpdate est désactivé
 
 #### Fonctionnement selon le type d'installation
 
