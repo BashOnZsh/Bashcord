@@ -17,18 +17,44 @@
 */
 
 import { HeaderBarButton } from "@api/HeaderBar";
-import { LogsIcon } from "@components/Icons";
 import { cl } from "@equicordplugins/messageLoggerEnhanced/index";
+import { findComponentByCodeLazy } from "@webpack";
 
+import { Native } from "..";
 import { openLogModal } from "./LogsModal";
 
-export function OpenLogsButton() {
+const Icon = findComponentByCodeLazy("0-1.27-.97l-2.5.7a3");
+
+function LogsFolderIcon() {
     return (
+        <svg aria-hidden="true" role="img" width="24" height="24" viewBox="0 0 24 24">
+            <path
+                fill="currentColor"
+                d="M10 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zM4 6h5.2l2 2H20v10H4V6zm2 3v2h12V9H6zm0 4v2h8v-2H6z"
+            />
+        </svg>
+    );
+}
+
+async function openLogsFolder() {
+    await Native.openLogsFolder();
+}
+
+export function OpenLogsButton() {
+    return <>
         <HeaderBarButton
             className={cl("toolbox-btn")}
             onClick={() => openLogModal()}
             tooltip={"Open Logs"}
-            icon={LogsIcon}
+            icon={Icon}
         />
-    );
+        <HeaderBarButton
+            className={cl("toolbox-btn")}
+            onClick={() => openLogsFolder()}
+            tooltip={"Open Logs Folder"}
+            icon={LogsFolderIcon}
+        />
+    </>;
 }
+
+export { Icon as LogsIcon };
