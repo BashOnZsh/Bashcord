@@ -131,6 +131,15 @@ export async function showItemInFolder(_event: IpcMainInvokeEvent, filePath: str
     shell.showItemInFolder(filePath);
 }
 
+export async function openLogsFolder(_event: IpcMainInvokeEvent) {
+    const logsDir = await getLogsDir();
+    const error = await shell.openPath(logsDir);
+
+    if (error) {
+        throw new Error(error);
+    }
+}
+
 export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filters: Electron.FileFilter[], defaultPath?: string) {
     const res = await dialog.showOpenDialog({ title, filters, properties: ["openFile"], defaultPath });
     const [path] = res.filePaths;
