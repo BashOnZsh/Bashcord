@@ -18,19 +18,9 @@ import { ChannelStore, Menu, RestAPI, showToast, Toasts, UserStore } from "@webp
 const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
 
 const settings = definePluginSettings({
-    enabled: {
-        type: OptionType.BOOLEAN,
-        description: "Activer le plugin LeaveAllGroups",
-        default: true
-    },
     showNotifications: {
         type: OptionType.BOOLEAN,
-        description: "Afficher les notifications lors des actions",
-        default: true
-    },
-    silentMode: {
-        type: OptionType.BOOLEAN,
-        description: "Mode discret: n'affiche ni notifications, ni toasts, ni logs d'info",
+        description: "Afficher les notifications/toasts lors des actions",
         default: true
     },
     confirmBeforeLeave: {
@@ -64,8 +54,6 @@ const settings = definePluginSettings({
 
 // Fonction de log avec préfixe
 function log(message: string, level: "info" | "warn" | "error" = "info") {
-    if (settings.store.silentMode && level === "info") return;
-
     const timestamp = new Date().toLocaleTimeString();
     const prefix = `[LeaveAllGroups ${timestamp}]`;
 
@@ -84,12 +72,12 @@ function log(message: string, level: "info" | "warn" | "error" = "info") {
 // Log de débogage
 function debugLog(message: string) {
     if (settings.store.debugMode) {
-        log(`🔍 ${message}`, "info");
+        log(`🔍 ${message}`);
     }
 }
 
 function notify(title: string, body: string, toastType?: string, toastBody?: string) {
-    if (settings.store.silentMode || !settings.store.showNotifications) return;
+    if (!settings.store.showNotifications) return;
 
     showNotification({
         title,
@@ -160,11 +148,6 @@ function getPinnedChannelIdsForUser(userId: string): Set<string> {
 
 // Fonction principale pour quitter tous les groupes
 async function leaveAllGroups() {
-    if (!settings.store.enabled) {
-        log("Plugin désactivé", "warn");
-        return;
-    }
-
     try {
         const currentUserId = UserStore.getCurrentUser()?.id;
 
@@ -266,8 +249,6 @@ async function leaveAllGroups() {
 
 // Menu contextuel pour les groupes
 const GroupContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: { channel: Channel; }) => {
-    if (!settings.store.enabled) return;
-
     // Vérifier que c'est un groupe DM
     if (channel?.type !== 3) return;
 
@@ -287,8 +268,6 @@ const GroupContextMenuPatch: NavContextMenuPatchCallback = (children, { channel 
 
 // Menu contextuel pour les serveurs (accès global)
 const ServerContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
-    if (!settings.store.enabled) return;
-
     const group = findGroupChildrenByChildId("privacy", children);
 
     if (group) {
@@ -305,8 +284,6 @@ const ServerContextMenuPatch: NavContextMenuPatchCallback = (children, props) =>
 
 // Menu contextuel pour les utilisateurs (accès depuis profil)
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
-    if (!settings.store.enabled) return;
-
     const container = findGroupChildrenByChildId("block", children) || findGroupChildrenByChildId("remove-friend", children);
 
     if (container) {
