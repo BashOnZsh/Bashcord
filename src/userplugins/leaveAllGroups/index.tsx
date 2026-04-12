@@ -7,6 +7,7 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { settings as pinDmsSettings } from "@plugins/pinDms";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
@@ -40,6 +41,11 @@ const settings = definePluginSettings({
     leaveSilently: {
         type: OptionType.BOOLEAN,
         description: "Activer 'Quitter sans en informer les autres membres' par défaut",
+        default: true
+    },
+    excludePinnedGroups: {
+        type: OptionType.BOOLEAN,
+        description: "Exclure les groupes épinglés (plugin PinDMs)",
         default: true
     },
     delayBetweenLeaves: {
@@ -146,6 +152,12 @@ function getAllGroups(): Channel[] {
     return groups;
 }
 
+function getPinnedChannelIdsForUser(userId: string): Set<string> {
+    const categoryList = pinDmsSettings.store.userBasedCategoryList[userId] ?? [];
+    const pinnedIds = categoryList.flatMap(category => category.channels ?? []);
+    return new Set(pinnedIds);
+}
+
 // Fonction principale pour quitter tous les groupes
 async function leaveAllGroups() {
     if (!settings.store.enabled) {
@@ -161,15 +173,26 @@ async function leaveAllGroups() {
             return;
         }
 
-        const groups = getAllGroups();
+        const allGroups = getAllGroups();
+        const pinnedChannelIds = settings.store.excludePinnedGroups
+            ? getPinnedChannelIdsForUser(currentUserId)
+            : new Set<string>();
+
+        const groups = allGroups.filter(group => !pinnedChannelIds.has(group.id));
+        const excludedPinnedCount = allGroups.length - groups.length;
 
         debugLog(`📊 Informations:
-- Nombre de groupes trouvés: ${groups.length}
+- Nombre de groupes trouvés: ${allGroups.length}
+- Groupes épinglés exclus: ${excludedPinnedCount}
 - Utilisateur actuel: ${currentUserId}`);
 
         if (groups.length === 0) {
-            log("Aucun groupe à quitter", "warn");
-            notify("ℹ️ LeaveAllGroups", "Aucun groupe à quitter", Toasts.Type.MESSAGE, "ℹ️ Aucun groupe à quitter");
+            const emptyMessage = excludedPinnedCount > 0
+                ? "Aucun groupe à quitter (tous les groupes trouvés sont épinglés)"
+                : "Aucun groupe à quitter";
+
+            log(emptyMessage, "warn");
+            notify("ℹ️ LeaveAllGroups", emptyMessage, Toasts.Type.MESSAGE, `ℹ️ ${emptyMessage}`);
             return;
         }
 
@@ -179,7 +202,7 @@ async function leaveAllGroups() {
             return;
         }
 
-        log(`🚀 Début de la sortie de ${groups.length} groupe(s)`);
+        log(`🚀 Début de la sortie de ${groups.length} groupe(s)${excludedPinnedCount > 0 ? ` (${excludedPinnedCount} épinglé(s) exclu(s))` : ""}`);
 
         let successCount = 0;
         let failureCount = 0;
