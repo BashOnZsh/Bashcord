@@ -23,11 +23,12 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 import { settings, toggleHoverControls } from "./settings";
-import { migrateOldLyrics } from "./spotify/lyrics/api";
-import { SpotifyLyrics } from "./spotify/lyrics/components/lyrics";
-import { SpotifyPlayer } from "./spotify/PlayerComponent";
 import { TidalLyrics } from "./tidal/lyrics/components/lyrics";
 import { TidalPlayer } from "./tidal/TidalPlayer";
+
+const migrateOldLyrics = async () => { };
+const SpotifyLyrics = () => null;
+const SpotifyPlayer = () => null;
 
 export default definePlugin({
     name: "MusicControls",
