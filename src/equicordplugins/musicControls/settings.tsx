@@ -14,9 +14,19 @@ import { makeRange, OptionType } from "@utils/types";
 import { MaskedLink, Select, showToast, TextInput, Toasts } from "@webpack/common";
 
 import hoverOnlyStyle from "./hoverOnly.css?managed";
-import { clearLyricsCache, removeTranslations } from "./spotify/lyrics/api";
-import languages from "./spotify/lyrics/providers/translator/languages";
-import { Provider } from "./spotify/lyrics/providers/types";
+
+enum Provider {
+    None = "none",
+    Lrclib = "lrclib",
+    Spotify = "spotify",
+    Translated = "translated",
+    Romanized = "romanized",
+}
+
+const languages = [{ value: "en", label: "English", default: true }];
+
+async function clearLyricsCache() { }
+async function removeTranslations() { }
 
 const sliderOptions = {
     markers: makeRange(-2500, 2500, 250),
