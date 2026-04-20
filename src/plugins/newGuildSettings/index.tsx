@@ -26,17 +26,18 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Guild } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy, findStoreLazy, mapMangledModuleLazy } from "@webpack";
-import { ChannelStore, Menu, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Menu, UserStore } from "@webpack/common";
 
 const { updateGuildNotificationSettings } = findByPropsLazy("updateGuildNotificationSettings");
 const { toggleShowAllChannels } = mapMangledModuleLazy(".onboardExistingMember(", {
-    toggleShowAllChannels: m => {
+    toggleShowAllChannels: (m: unknown) => {
         const s = String(m);
         return s.length < 100 && !s.includes("onboardExistingMember") && !s.includes("getOptedInChannels");
     }
 });
 const isOptInEnabledForGuild = findByCodeLazy(".COMMUNITY)||", ".isOptInEnabled(");
 const CollapsedVoiceChannelStore = findStoreLazy("CollapsedVoiceChannelStore");
+const GuildStore = findStoreLazy("GuildStore");
 const collapsedChannels = findByPropsLazy("toggleCollapseGuild");
 
 const settings = definePluginSettings({
@@ -89,10 +90,19 @@ const settings = definePluginSettings({
         description: "Hide names in Voice channels automatically",
         type: OptionType.BOOLEAN,
         default: false
+    },
+    applyToAllGuilds: {
+        type: OptionType.COMPONENT,
+        description: "Apply the currently selected settings to all guilds",
+        component: () => (
+            <Button onClick={applyDefaultSettingsToAllGuilds}>
+                Apply selected settings to all guilds
+            </Button>
+        )
     }
 });
 
-const makeContextMenuPatch: (shouldAddIcon: boolean) => NavContextMenuPatchCallback = (shouldAddIcon: boolean) => (children, { guild }: { guild: Guild, onClose(): void; }) => {
+const makeContextMenuPatch: (shouldAddIcon: boolean) => NavContextMenuPatchCallback = (shouldAddIcon: boolean) => (children: any[], { guild }: { guild: Guild, onClose(): void; }) => {
     if (!guild) return;
 
     const group = findGroupChildrenByChildId("privacy", children);
@@ -110,12 +120,43 @@ function applyVoiceNameHidingToGuild(guildId: string) {
     if (!settings.store.voiceChannels) return;
 
     try {
-        ChannelStore.getChannelIds(guildId).filter(channelId => {
+        ChannelStore.getChannelIds(guildId).filter((channelId: string) => {
             const channel = ChannelStore.getChannel(channelId);
             return channel.isGuildVocal() && !CollapsedVoiceChannelStore.isCollapsed(channelId);
-        }).forEach(id => collapsedChannels.update(id));
+        }).forEach((id: string) => collapsedChannels.update(id));
     } catch (error) {
         console.warn("[NewGuildSettings] Error applying voice name hiding:", error);
+    }
+}
+
+function getGuildIds(): string[] {
+    const guilds = GuildStore.getGuilds?.();
+    if (guilds && typeof guilds === "object") {
+        return Object.keys(guilds).filter(Boolean);
+    }
+
+    const flattenedGuildIds = GuildStore.getFlattenedGuildIds?.();
+    if (Array.isArray(flattenedGuildIds)) {
+        return flattenedGuildIds.filter(Boolean);
+    }
+
+    const guildIds = GuildStore.getGuildIds?.();
+    if (Array.isArray(guildIds)) {
+        return guildIds.filter(Boolean);
+    }
+
+    return [];
+}
+
+function applyDefaultSettingsToAllGuilds() {
+    const guildIds = [...new Set(getGuildIds())].filter(guildId => guildId !== "@me" && guildId !== "null");
+
+    for (const guildId of guildIds) {
+        try {
+            applyDefaultSettings(guildId);
+        } catch (error) {
+            console.warn(`[NewGuildSettings] Error applying settings to guild ${guildId}:`, error);
+        }
     }
 }
 
@@ -164,21 +205,22 @@ export default definePlugin({
             find: ",acceptInvite(",
             replacement: {
                 match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=\i\?\.guild_id.+?;/,
-                replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
+                replace: (m: string, guildId: string) => `${m}$self.applyDefaultSettings(${guildId});`
             }
         },
         {
             find: "{joinGuild:",
             replacement: {
                 match: /guildId:(\i),lurker:(\i).{0,20}}\)\);/,
-                replace: (m, guildId, lurker) => `${m}if(!${lurker})$self.applyDefaultSettings(${guildId});`
+                replace: (m: string, guildId: string, lurker: string) => `${m}if(!${lurker})$self.applyDefaultSettings(${guildId});`
             }
         }
     ],
     settings,
     applyDefaultSettings,
+    applyDefaultSettingsToAllGuilds,
     flux: {
-        GUILD_JOIN_REQUEST_UPDATE({ guildId, request, status }) {
+        GUILD_JOIN_REQUEST_UPDATE({ guildId, request, status }: { guildId: string; request: { user_id: string; }; status: string; }) {
             if (status === "APPROVED" && request.user_id === UserStore.getCurrentUser().id)
                 applyDefaultSettings(guildId);
         }
