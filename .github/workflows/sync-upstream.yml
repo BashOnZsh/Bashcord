@@ -45,6 +45,8 @@ jobs:
                     "src/utils/updater.ts"
                     "src/components/settings/tabs/updater"
                     "src/components/settings/tabs/plugins"
+                    "src/components/settings/tabs/vencord"
+                    "src/components/settings/tabs/changelog"
                     "README.md"
                     "browser/icon.png"
                     "plugins.json"
