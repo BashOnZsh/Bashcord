@@ -10,11 +10,10 @@ import { Settings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Flex } from "@components/Flex";
 import { ImageIcon, LinkIcon, OpenExternalIcon } from "@components/Icons";
-import { SeekBar } from "@equicordplugins/musicControls/spotify/SeekBar";
 import { debounce } from "@shared/debounce";
 import { copyWithToast, openImageModal } from "@utils/discord";
 import { classes } from "@utils/misc";
-import { ContextMenuApi, FluxDispatcher, Menu, React, useEffect, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, Menu, React, Slider, useEffect, useState, useStateFromStores } from "@webpack/common";
 
 import { type PlayerState, type Repeat, TidalStore } from "./TidalStore";
 
@@ -189,7 +188,7 @@ function TdlSeekBar() {
             >
                 {msToHuman(position)}
             </BaseText>
-            <SeekBar
+            <Slider
                 initialValue={position}
                 minValue={0}
                 maxValue={songDuration * 1000}

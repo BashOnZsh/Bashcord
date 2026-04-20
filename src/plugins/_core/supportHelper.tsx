@@ -20,6 +20,7 @@ import { sendBotMessage } from "@api/Commands";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
+import { BaseText } from "@components/BaseText";
 import { Card } from "@components/Card";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
@@ -39,9 +40,8 @@ import { onlyOnce } from "@utils/onlyOnce";
 import { makeCodeblock } from "@utils/text";
 import definePlugin from "@utils/types";
 import { checkForUpdates, isOutdated, update } from "@utils/updater";
-import { RenderModalProps } from "@vencord/discord-types";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { Alerts, Button, ChannelStore, CloudUploader, ConfirmModal, Constants, GuildMemberStore, openModal, Parser, PermissionsBits, PermissionStore, RelationshipStore, RestAPI, SelectedChannelStore, showToast, SnowflakeUtils, Text, Toasts, UserStore } from "@webpack/common";
+import { Alerts, Button, ChannelStore, CloudUploader, Constants, GuildMemberStore, Parser, PermissionsBits, PermissionStore, RelationshipStore, RestAPI, SelectedChannelStore, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 import { JSX } from "react";
 
 import plugins, { PluginMeta } from "~plugins";
@@ -144,7 +144,7 @@ async function generateDebugInfoMessage() {
         : platformName();
 
     const info = {
-        Equicord:
+        Bashcord:
             `v${VERSION} • [${gitHashShort}](<https://github.com/Equicord/Equicord/commit/${gitHash}>)` +
             `${IS_EQUIBOP ? "" : SettingsPlugin.getVersionInfo()} - ${Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(BUILD_TIMESTAMP)}`,
         Client: `${RELEASE_CHANNEL} ~ ${clientString}`,
@@ -170,7 +170,7 @@ async function generateDebugInfoMessage() {
     const commonIssues = {
         "Activity Sharing Disabled": tryOrElse(() => !ShowCurrentGame.getSetting(), false),
         "Link Embeds Disabled": tryOrElse(() => !ShowEmbeds.getSetting(), false),
-        "Equicord DevBuild": !IS_STANDALONE,
+        "Bashcord DevBuild": !IS_STANDALONE,
         "Equibop DevBuild": IS_EQUIBOP && tryOrElse(() => VesktopNative.app.isDevBuild?.(), false),
         "Platform Spoofed": spoofInfo?.spoofed ?? false,
         "Has UserPlugins": Object.values(PluginMeta).some(m => m.userPlugin),
@@ -284,34 +284,6 @@ const settings = definePluginSettings({}).withPrivateSettings<{
     dismissedDevBuildWarning?: boolean;
 }>();
 
-function DevBuildConfirmModal(props: RenderModalProps) {
-    const s = settings.use(["dismissedDevBuildWarning"]);
-
-    return (
-        <ConfirmModal
-            {...props}
-            title="Hold on!"
-            confirmText="Understood"
-            variant="primary"
-            checkboxProps={{
-                checked: s.dismissedDevBuildWarning === true,
-                onChange: checked => s.dismissedDevBuildWarning = checked
-            }}
-        >
-            <div>
-                <Paragraph>You are using a custom build of Equicord, which we do not provide support for!</Paragraph>
-
-                <Paragraph className={Margins.top8}>
-                    We only provide support for <Link href="https://equicord.org/download">official builds</Link>.
-                    Either <Link href="https://equicord.org/download">switch to an official build</Link> or figure your issue out yourself.
-                </Paragraph>
-
-                <Text variant="text-md/bold" className={Margins.top8}>You will be banned from receiving support if you ignore this rule.</Text>
-            </div>
-        </ConfirmModal>
-    );
-}
-
 export default definePlugin({
     name: "SupportHelper",
     required: true,
@@ -332,14 +304,14 @@ export default definePlugin({
     commands: [
         {
             name: "equicord-debug",
-            description: "Send Equicord debug info",
+            description: "Send Bashcord debug info",
             // @ts-ignore
             predicate: ctx => isAnyPluginDev(UserStore.getCurrentUser()?.id) || isEquicordGuild(ctx?.guild?.id, true),
             execute: async () => ({ content: await generateDebugInfoMessage() })
         },
         {
             name: "equicord-plugins",
-            description: "Send Equicord plugin list",
+            description: "Send Bashcord plugin list",
             // @ts-ignore
             predicate: ctx => isAnyPluginDev(UserStore.getCurrentUser()?.id) || isEquicordGuild(ctx?.guild?.id, true),
             execute: async () => {
@@ -374,28 +346,20 @@ export default definePlugin({
                 await checkForUpdatesOnce().catch(() => { });
 
                 if (isOutdated) {
-                    openModal(props => (
-                        <ConfirmModal
-                            {...props}
-                            variant="primary"
-                            title="Hold on!"
-                            confirmText="Update & Restart Now"
-                            cancelText="View Updates"
-                            onConfirm={forceUpdate}
-                            onCancel={() => openSettingsTabModal(UpdaterTab!)}
-                        >
-                            <div>
-                                <Paragraph>You are using an outdated version of Equicord! Chances are, your issue is already fixed.</Paragraph>
-                                <Paragraph className={Margins.top8}>
-                                    Please first update before asking for support!
-                                </Paragraph>
-                                <Paragraph className={Margins.top8}>
-                                    If you know what you're doing or cannot update, you can dismiss this prompt.
-                                </Paragraph>
-                            </div>
-                        </ConfirmModal>
-                    ));
-                    return;
+                    return Alerts.show({
+                        title: "Hold on!",
+                        body: <div>
+                            <Paragraph>You are using an outdated version of Bashcord! Chances are, your issue is already fixed.</Paragraph>
+                            <Paragraph className={Margins.top8}>
+                                Please first update before asking for support!
+                            </Paragraph>
+                        </div>,
+                        onCancel: () => openSettingsTabModal(UpdaterTab!),
+                        cancelText: "View Updates",
+                        confirmText: "Update & Restart Now",
+                        onConfirm: forceUpdate,
+                        secondaryConfirmText: "I know what I'm doing or I can't update"
+                    });
                 }
             }
 
@@ -403,28 +367,35 @@ export default definePlugin({
             if (!roles || TrustedRolesIds.some(id => roles.includes(id))) return;
 
             if (!IS_WEB && IS_UPDATER_DISABLED) {
-                openModal(props => (
-                    <ConfirmModal
-                        {...props}
-                        title="Hold on!"
-                        confirmText="OK"
-                        variant="primary"
-                    >
-                        <div>
-                            <Paragraph>You are using an externally updated Equicord version, which we do not provide support for!</Paragraph>
-                            <Paragraph className={Margins.top8}>
-                                Please either switch to an <Link href="https://equicord.org/download">officially supported version of Equicord</Link>, or
-                                contact your package maintainer for support instead.
-                            </Paragraph>
-                        </div>
-                    </ConfirmModal>
-                ));
-                return;
+                return Alerts.show({
+                    title: "Hold on!",
+                    body: <div>
+                        <Paragraph>You are using an externally updated Bashcord version, the ability to help you here may be limited.</Paragraph>
+                        <Paragraph className={Margins.top8}>
+                            Please join the <Link href="https://equicord.org/discord">Bashcord Server</Link> for support,
+                            or if this issue persists on Vencord, continue on.
+                        </Paragraph>
+                    </div>
+                });
             }
 
             if (!IS_STANDALONE && !settings.store.dismissedDevBuildWarning) {
-                openModal(props => <DevBuildConfirmModal {...props} />);
-                return;
+                return Alerts.show({
+                    title: "Hold on!",
+                    body: <div>
+                        <Paragraph>You are using a custom build of Equicord, which we do not provide support for!</Paragraph>
+
+                        <Paragraph className={Margins.top8}>
+                            We only provide support for <Link href="https://github.com/Equicord/Equicord">official builds</Link>.
+                            Either <Link href="https://github.com/Equicord/Equilotl">switch to an official build</Link> or figure your issue out yourself.
+                        </Paragraph>
+
+                        <BaseText size="md" weight="bold" className={Margins.top8}>You will be banned from receiving support if you ignore this rule.</BaseText>
+                    </div>,
+                    confirmText: "Understood",
+                    secondaryConfirmText: "Don't show again",
+                    onConfirmSecondary: () => settings.store.dismissedDevBuildWarning = true
+                });
             }
         }
     },
