@@ -33,30 +33,17 @@ jobs:
 
             - name: Save protected files
               run: |
-                  # Ajoute ici les fichiers/dossiers à protéger
-                  PROTECTED=(
-                    ".github/workflows"
-                    "package.json"
-                    "pnpm-lock.yaml"
-                    "tsconfig.json"
-                    "src/userplugins"
-                    "src/equicordplugins/followVoiceUser"
-                    "src/equicordplugins/equicordToolbox"
-                    "src/equicordplugins/instantScreenshare"
-                    "src/plugins/_core/settings.tsx"
-                    "src/main/updater"
-                    "src/utils/updater.ts"
-                    "src/components/settings/tabs/updater"
-                    "src/components/settings/tabs/plugins"
-                    "src/components/settings/tabs/vencord"
-                    "src/components/settings/tabs/changelog"
-                    "README.md"
-                    "browser/icon.png"
-                    "plugins.json"
-                    "vencordplugins.json"
-                    "equicordplugins.json"
-                    "devs.json"
-                  )
+                  if [ ! -f .sync-upstream-protected ]; then
+                    echo "Missing .sync-upstream-protected"
+                    exit 1
+                  fi
+
+                  mapfile -t PROTECTED < <(grep -vE '^\s*(#|$)' .sync-upstream-protected)
+
+                  if [ "${#PROTECTED[@]}" -eq 0 ]; then
+                    echo "No protected paths found in .sync-upstream-protected"
+                    exit 1
+                  fi
 
                   # Reuse the same protected scope across save/rebase/restore.
                   printf '%s\n' "${PROTECTED[@]}" > /tmp/protected-paths.txt
