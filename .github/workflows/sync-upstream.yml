@@ -38,6 +38,7 @@ jobs:
                     ".github/workflows"
                     "package.json"
                     "pnpm-lock.yaml"
+                    "tsconfig.json"
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
                     "src/plugins/_core/settings.tsx"
