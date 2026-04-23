@@ -44,6 +44,7 @@ jobs:
                     "src/equicordplugins/equicordToolbox"
                     "src/equicordplugins/instantScreenshare"
                     "src/plugins/_core/settings.tsx"
+                    "src/plugins/spotifyShareCommands"
                     "src/main/updater"
                     "src/utils/updater.ts"
                     "src/components/settings/tabs/updater"
@@ -79,6 +80,9 @@ jobs:
                   git checkout main
 
                   mapfile -t PROTECTED < /tmp/protected-paths.txt
+                  UPSTREAM_SYNC=(
+                    "src/plugins/spotifyCrack"
+                  )
 
                   is_protected_file() {
                     local file="$1"
@@ -91,11 +95,22 @@ jobs:
                     return 1
                   }
 
+                  is_upstream_sync_file() {
+                    local file="$1"
+                    local path
+                    for path in "${UPSTREAM_SYNC[@]}"; do
+                      if [[ "$file" == "$path" || "$file" == "$path"/* ]]; then
+                        return 0
+                      fi
+                    done
+                    return 1
+                  }
+
                   rebase_status=0
                   GIT_EDITOR=true git rebase upstream/main || rebase_status=$?
 
                   while [ "$rebase_status" -ne 0 ]; do
-                    conflicted_files="$(git diff --name-only --diff-filter=U || true)"
+                    conflicted_files="$(git status --porcelain | awk '$1 ~ /^(DD|AA|UU|UD|DU|AU|UA)$/ {print $2}')"
 
                     if [ -z "$conflicted_files" ]; then
                       echo "Rebase failed without merge conflicts."
@@ -108,7 +123,11 @@ jobs:
                       if is_protected_file "$file"; then
                         echo "Auto-resolving protected conflict with ours: $file"
                         git checkout --ours -- "$file"
-                        git add "$file"
+                        git add -A -- "$file"
+                      elif is_upstream_sync_file "$file"; then
+                        echo "Auto-resolving upstream-synced conflict with theirs: $file"
+                        git checkout --theirs -- "$file" 2>/dev/null || true
+                        git add -A -- "$file"
                       else
                         echo "Conflict on non-protected file: $file"
                         unresolved=1
