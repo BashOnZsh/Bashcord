@@ -10,7 +10,7 @@ import { BrowserWindow, dialog, shell, WebContentsView } from "electron";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { mkdir, readdir, readFile, rm } from "fs/promises";
 import { basename, join } from "path";
-import yaml from "yaml-js";
+import yaml from "js-yaml";
 
 // @ts-ignore fuck off
 import pluginValidateContent from "./misc/pluginValidate.txt"; // i would use HTML but esbuild is being whiny
