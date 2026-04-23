@@ -44,7 +44,6 @@ jobs:
                     "src/equicordplugins/equicordToolbox"
                     "src/equicordplugins/instantScreenshare"
                     "src/plugins/_core/settings.tsx"
-                    "src/plugins/spotifyShareCommands"
                     "src/main/updater"
                     "src/utils/updater.ts"
                     "src/components/settings/tabs/updater"
@@ -80,25 +79,11 @@ jobs:
                   git checkout main
 
                   mapfile -t PROTECTED < /tmp/protected-paths.txt
-                  UPSTREAM_SYNC=(
-                    "src/plugins/spotifyCrack"
-                  )
 
                   is_protected_file() {
                     local file="$1"
                     local path
                     for path in "${PROTECTED[@]}"; do
-                      if [[ "$file" == "$path" || "$file" == "$path"/* ]]; then
-                        return 0
-                      fi
-                    done
-                    return 1
-                  }
-
-                  is_upstream_sync_file() {
-                    local file="$1"
-                    local path
-                    for path in "${UPSTREAM_SYNC[@]}"; do
                       if [[ "$file" == "$path" || "$file" == "$path"/* ]]; then
                         return 0
                       fi
@@ -117,15 +102,14 @@ jobs:
                       exit "$rebase_status"
                     fi
 
-                    unresolved=0
                     while IFS= read -r file; do
                       [ -z "$file" ] && continue
                       if is_protected_file "$file"; then
                         echo "Auto-resolving protected conflict with ours: $file"
                         git checkout --ours -- "$file"
                         git add -A -- "$file"
-                      elif is_upstream_sync_file "$file"; then
-                        echo "Auto-resolving upstream-synced conflict with theirs: $file"
+                      else
+                        echo "Auto-resolving non-protected conflict with theirs: $file"
                         # Stage 3 exists when the upstream side has file content.
                         # If not, upstream deleted the file and we keep that deletion.
                         if git cat-file -e ":3:$file" 2>/dev/null; then
@@ -134,17 +118,8 @@ jobs:
                         else
                           git rm -f -- "$file" || true
                         fi
-                      else
-                        echo "Conflict on non-protected file: $file"
-                        unresolved=1
                       fi
                     done <<< "$conflicted_files"
-
-                    if [ "$unresolved" -ne 0 ]; then
-                      echo "Found conflicts outside protected scope; manual resolution required."
-                      git status --short
-                      exit 1
-                    fi
 
                     rebase_status=0
                     GIT_EDITOR=true git rebase --continue || rebase_status=$?
