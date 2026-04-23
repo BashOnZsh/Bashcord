@@ -19,15 +19,14 @@ import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { openContributorModal, openPluginModal, SettingsTab, wrapTab } from "@components/settings";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
-import { SpecialCard } from "@components/settings/SpecialCard";
-import BadgeAPI from "@plugins/_api/badges";
 import { gitRemote } from "@shared/vencordUserAgent";
 import { DONOR_ROLE_ID, GUILD_ID, IS_MAC, IS_WINDOWS, VC_DONOR_ROLE_ID, VC_GUILD_ID } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { identity, isAnyPluginDev } from "@utils/misc";
 import { relaunch } from "@utils/native";
-import { Alerts, GuildMemberStore, React, Select, UserStore } from "@webpack/common";
+import { GuildMemberStore, React, Select, UserStore } from "@webpack/common";
+import BadgeAPI from "plugins/_api/badges";
 
 import { DonateButtonComponent } from "./DonateButton";
 import { openNotificationSettingsModal } from "./NotificationSettings";
@@ -123,55 +122,6 @@ function EquicordSettings() {
 
     return (
         <SettingsTab>
-            {(isEquicordDonor(user?.id) || isVencordDonor(user?.id)) ? (
-                <SpecialCard
-                    title="Donations"
-                    subtitle="Thank you for donating!"
-                    description={
-                        isEquicordDonor(user?.id) && isVencordDonor(user?.id)
-                            ? "All Vencord users can see your Vencord donor badge, and Equicord users can see your Equicord donor badge. To change your Vencord donor badge, contact @vending.machine. For your Equicord donor badge, make a ticket in Equicord's server."
-                            : isVencordDonor(user?.id)
-                                ? "All Vencord users can see your badge! You can manage your perks by messaging @vending.machine."
-                                : "All Equicord users can see your badge! You can manage your perks by making a ticket in Equicord's server."
-                    }
-                    cardImage={VENNIE_DONATOR_IMAGE}
-                    backgroundImage={DONOR_BACKGROUND_IMAGE}
-                    backgroundColor="#ED87A9"
-                >
-                    <DonateButtonComponent donated={true} />
-                </SpecialCard>
-            ) : (
-                <SpecialCard
-                    title="Support the Project"
-                    description="Please consider supporting the development of Equicord by donating!"
-                    cardImage={donateImage}
-                    backgroundImage={DONOR_BACKGROUND_IMAGE}
-                    backgroundColor="#c3a3ce"
-                >
-                    <DonateButtonComponent />
-                </SpecialCard>
-            )}
-            {isAnyPluginDev(user?.id) && (
-                <SpecialCard
-                    title="Contributions"
-                    subtitle="Thank you for contributing!"
-                    description="Since you've contributed to Equicord you now have a cool new badge!"
-                    cardImage={COZY_CONTRIB_IMAGE}
-                    backgroundImage={CONTRIB_BACKGROUND_IMAGE}
-                    backgroundColor="#EDCC87"
-                >
-                    <Button
-                        variant="none"
-                        size="medium"
-                        type="button"
-                        onClick={() => openContributorModal(user)}
-                        className="vc-contrib-button"
-                    >
-                        <GithubIcon aria-hidden fill={"#000000"} className={"vc-contrib-github"} />
-                        See what you've contributed to
-                    </Button>
-                </SpecialCard>
-            )}
 
             <Heading className={Margins.top16}>Quick Actions</Heading>
             <Paragraph className={Margins.bottom16}>
@@ -236,19 +186,7 @@ function EquicordSettings() {
                     <FormSwitch
                         key={s.key}
                         value={settings[s.key]}
-                        onChange={v => {
-                            settings[s.key] = v;
-
-                            if (s.restartRequired) {
-                                Alerts.show({
-                                    title: "Restart Required",
-                                    body: "A restart is required to apply this change",
-                                    confirmText: "Restart now",
-                                    cancelText: "Later!",
-                                    onConfirm: relaunch
-                                });
-                            }
-                        }}
+                        onChange={v => (settings[s.key] = v)}
                         title={s.title}
                         description={
                             s.warning ? (
