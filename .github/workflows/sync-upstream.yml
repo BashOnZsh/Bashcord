@@ -41,6 +41,8 @@ jobs:
                     "tsconfig.json"
                     "src/userplugins"
                     "src/equicordplugins/followVoiceUser"
+                    "src/equicordplugins/equicordToolbox"
+                    "src/equicordplugins/instantScreenshare"
                     "src/plugins/_core/settings.tsx"
                     "src/main/updater"
                     "src/utils/updater.ts"
