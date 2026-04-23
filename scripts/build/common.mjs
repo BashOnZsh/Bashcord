@@ -306,6 +306,47 @@ export const fileUrlPlugin = {
 };
 
 /**
+ * @type {import("esbuild").Plugin}
+ */
+export const debugAliasPlugin = {
+    name: "debug-alias-plugin",
+    setup: build => {
+        const root = join(dirname(fileURLToPath(import.meta.url)), "../../src/debug");
+        const extensions = [".ts", ".tsx", ".js", ".jsx"];
+
+        build.onResolve({ filter: /^@?debug\/.+/ }, async args => {
+            const requestPath = args.path.startsWith("@")
+                ? args.path.slice("@debug/".length)
+                : args.path.slice("debug/".length);
+
+            const rawPath = join(root, requestPath);
+
+            if (/\.[^/\\]+$/.test(rawPath)) {
+                return { path: rawPath };
+            }
+
+            for (const extension of extensions) {
+                const filePath = `${rawPath}${extension}`;
+                if (await exists(filePath)) {
+                    return { path: filePath };
+                }
+            }
+
+            for (const extension of extensions) {
+                const indexPath = join(rawPath, `index${extension}`);
+                if (await exists(indexPath)) {
+                    return { path: indexPath };
+                }
+            }
+
+            return {
+                path: rawPath
+            };
+        });
+    }
+};
+
+/**
  * @type {(filter: RegExp, message: string) => import("esbuild").Plugin}
  */
 export const banImportPlugin = (filter, message) => ({
@@ -353,7 +394,7 @@ export const commonOpts = {
     sourcemap: watch ? "inline" : "external",
     legalComments: "linked",
     banner,
-    plugins: [fileUrlPlugin, gitHashPlugin, gitRemotePlugin, stylePlugin],
+    plugins: [debugAliasPlugin, fileUrlPlugin, gitHashPlugin, gitRemotePlugin, stylePlugin],
     external: ["~plugins", "~git-hash", "~git-remote", "/assets/*"],
     inject: [join(dirname(fileURLToPath(import.meta.url)), "inject/react.mjs")],
     jsx: "transform",
