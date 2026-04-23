@@ -77,10 +77,10 @@ if (-not [string]::IsNullOrWhiteSpace(($workingTree -join ""))) {
 $protectedConfigPath = ".sync-upstream-protected"
 $protectedLocalConfigPath = ".sync-upstream-protected.local"
 
-$protectedPaths = @()
-$protectedPaths += Get-ProtectedPathsFromFile -Path $protectedConfigPath
-$protectedPaths += Get-ProtectedPathsFromFile -Path $protectedLocalConfigPath
-$protectedPaths = $protectedPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+$protectedPaths = @(
+    (Get-ProtectedPathsFromFile -Path $protectedConfigPath),
+    (Get-ProtectedPathsFromFile -Path $protectedLocalConfigPath)
+)
 
 if ($protectedPaths.Count -eq 0) {
     throw "No protected paths found. Configure .sync-upstream-protected (and optional .sync-upstream-protected.local)."
