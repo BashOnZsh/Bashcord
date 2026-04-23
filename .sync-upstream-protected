@@ -1,0 +1,23 @@
+# Protected files/directories preserved during upstream sync
+
+.github/workflows
+package.json
+pnpm-lock.yaml
+tsconfig.json
+src/userplugins
+src/equicordplugins/followVoiceUser
+src/equicordplugins/equicordToolbox
+src/equicordplugins/instantScreenshare
+src/plugins/\_core/settings.tsx
+src/main/updater
+src/utils/updater.ts
+src/components/settings/tabs/updater
+src/components/settings/tabs/plugins
+src/components/settings/tabs/vencord
+src/components/settings/tabs/changelog
+README.md
+browser/icon.png
+plugins.json
+vencordplugins.json
+equicordplugins.json
+devs.json

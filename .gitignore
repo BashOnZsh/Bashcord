@@ -31,3 +31,6 @@ ExtensionCache/
 
 # wakatime related stuff
 .wakatime-project
+
+# local overrides for upstream sync protected paths
+.sync-upstream-protected.local
