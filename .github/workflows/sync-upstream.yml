@@ -110,7 +110,7 @@ jobs:
                   GIT_EDITOR=true git rebase upstream/main || rebase_status=$?
 
                   while [ "$rebase_status" -ne 0 ]; do
-                    conflicted_files="$(git status --porcelain | awk '$1 ~ /^(DD|AA|UU|UD|DU|AU|UA)$/ {print $2}')"
+                    conflicted_files="$(git diff --name-only --diff-filter=U)"
 
                     if [ -z "$conflicted_files" ]; then
                       echo "Rebase failed without merge conflicts."
@@ -126,8 +126,14 @@ jobs:
                         git add -A -- "$file"
                       elif is_upstream_sync_file "$file"; then
                         echo "Auto-resolving upstream-synced conflict with theirs: $file"
-                        git checkout --theirs -- "$file" 2>/dev/null || true
-                        git add -A -- "$file"
+                        # Stage 3 exists when the upstream side has file content.
+                        # If not, upstream deleted the file and we keep that deletion.
+                        if git cat-file -e ":3:$file" 2>/dev/null; then
+                          git checkout --theirs -- "$file"
+                          git add -A -- "$file"
+                        else
+                          git rm -f -- "$file" || true
+                        fi
                       else
                         echo "Conflict on non-protected file: $file"
                         unresolved=1
