@@ -57,6 +57,12 @@
             ],
             "@equicordplugins/*": [
                 "./equicordplugins/*"
+            ],
+            "debug/*": [
+                "./debug/*"
+            ],
+            "@debug/*": [
+                "./debug/*"
             ]
         },
         "plugins": [
