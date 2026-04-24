@@ -113,8 +113,7 @@ jobs:
                   git clone https://x-access-token:$GH_TOKEN@github.com/$REPO.git plugins
                   cd plugins
 
-                  cp ../dist/release/*plugins.json .
-                  cp ../dist/release/devs.json .
+                  cp ../dist/release/*.json .
                   git add -A
 
                   git diff --cached --quiet || git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
