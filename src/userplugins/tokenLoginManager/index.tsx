@@ -507,7 +507,7 @@ const TokenLoginManagerPage: React.ComponentType = () => {
 };
 
 export default definePlugin({
-    name: "tokinLoginManager",
+    name: "tokenLoginManager",
     description: "Manage and login with user tokens",
     authors: [EquicordDevs.Stealtech],
     tags: ["Equicord X Ba$h"],
