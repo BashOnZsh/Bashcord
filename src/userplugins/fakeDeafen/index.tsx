@@ -11,7 +11,87 @@ import { React, useState } from "@webpack/common";
 import { Forms } from "@webpack/common";
 
 let originalVoiceStateUpdate: any;
+let patchedGatewayConnection: any;
 let fakeDeafenEnabled = false;
+
+let ChannelStore: any;
+let SelectedChannelStore: any;
+let GatewayConnection: any;
+let MediaEngineStore: any;
+
+const failedLookups = new Set<string>();
+
+function safeFindByProps<T = any>(...props: string[]): T | null {
+    const lookupKey = props.join("|");
+    if (failedLookups.has(lookupKey)) {
+        return null;
+    }
+
+    try {
+        const mod = findByProps(...props) as T;
+        return mod;
+    } catch {
+        failedLookups.add(lookupKey);
+        return null;
+    }
+}
+
+function resolveGatewayConnection() {
+    return safeFindByProps("voiceStateUpdate", "voiceServerPing")
+        ?? safeFindByProps("voiceStateUpdate");
+}
+
+function resolveRuntimeModules() {
+    ChannelStore = ChannelStore
+        ?? safeFindByProps("getChannel", "getDMFromUserId")
+        ?? safeFindByProps("getChannel");
+
+    SelectedChannelStore = SelectedChannelStore
+        ?? safeFindByProps("getVoiceChannelId")
+        ?? safeFindByProps("getVoiceChannelId", "getChannelId");
+
+    MediaEngineStore = MediaEngineStore
+        ?? safeFindByProps("isDeaf", "isMute")
+        ?? safeFindByProps("isSelfDeaf", "isSelfMute");
+
+    GatewayConnection = GatewayConnection ?? resolveGatewayConnection();
+}
+
+function patchGatewayConnection() {
+    if (!GatewayConnection || typeof GatewayConnection.voiceStateUpdate !== "function") return false;
+    if (patchedGatewayConnection === GatewayConnection && originalVoiceStateUpdate) return true;
+
+    originalVoiceStateUpdate = GatewayConnection.voiceStateUpdate;
+    patchedGatewayConnection = GatewayConnection;
+    GatewayConnection.voiceStateUpdate = function (args) {
+        if (fakeDeafenEnabled && args && typeof args === "object") {
+            args.selfMute = true;
+            args.selfDeaf = true;
+        }
+        return originalVoiceStateUpdate.apply(this, arguments);
+    };
+
+    return true;
+}
+
+function getSelfMuteState() {
+    return MediaEngineStore?.isMute?.() ?? MediaEngineStore?.isSelfMute?.() ?? false;
+}
+
+function getSelfDeafState() {
+    return MediaEngineStore?.isDeaf?.() ?? MediaEngineStore?.isSelfDeaf?.() ?? false;
+}
+
+function getCurrentVoiceChannel() {
+    const channelId = SelectedChannelStore?.getVoiceChannelId?.() ?? SelectedChannelStore?.getChannelId?.();
+    return channelId ? ChannelStore?.getChannel?.(channelId) : null;
+}
+
+function ensureRuntimeReadyForToggle() {
+    resolveRuntimeModules();
+    if (!patchGatewayConnection()) return false;
+    return Boolean(ChannelStore && SelectedChannelStore && typeof GatewayConnection?.voiceStateUpdate === "function");
+}
 
 function KeybindRecorder() {
     const [isRecording, setIsRecording] = useState(false);
@@ -110,36 +190,35 @@ function handleKeyPress(e: KeyboardEvent) {
         e.preventDefault();
         e.stopPropagation();
 
+        if (!ensureRuntimeReadyForToggle()) {
+            console.warn("[FakeDeafen] Dépendances runtime manquantes, toggle ignoré");
+            return;
+        }
+
+        const channel = getCurrentVoiceChannel();
+        if (!channel) {
+            console.warn("[FakeDeafen] Aucun canal vocal valide, toggle ignoré");
+            return;
+        }
+
         fakeDeafenEnabled = !fakeDeafenEnabled;
 
-        const ChannelStore = findByProps("getChannel", "getDMFromUserId");
-        const SelectedChannelStore = findByProps("getVoiceChannelId");
-        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
-        const MediaEngineStore = findByProps("isDeaf", "isMute");
-
-        if (ChannelStore && SelectedChannelStore && GatewayConnection && typeof GatewayConnection.voiceStateUpdate === "function") {
-            const channelId = SelectedChannelStore.getVoiceChannelId?.();
-            const channel = channelId ? ChannelStore.getChannel?.(channelId) : null;
-
-            if (channel) {
-                if (fakeDeafenEnabled) {
-                    GatewayConnection.voiceStateUpdate({
-                        channelId: channel.id,
-                        guildId: channel.guild_id,
-                        selfMute: true,
-                        selfDeaf: true
-                    });
-                } else {
-                    const selfMute = MediaEngineStore?.isMute?.() ?? false;
-                    const selfDeaf = MediaEngineStore?.isDeaf?.() ?? false;
-                    GatewayConnection.voiceStateUpdate({
-                        channelId: channel.id,
-                        guildId: channel.guild_id,
-                        selfMute,
-                        selfDeaf
-                    });
-                }
-            }
+        if (fakeDeafenEnabled) {
+            GatewayConnection.voiceStateUpdate({
+                channelId: channel.id,
+                guildId: channel.guild_id,
+                selfMute: true,
+                selfDeaf: true
+            });
+        } else {
+            const selfMute = getSelfMuteState();
+            const selfDeaf = getSelfDeafState();
+            GatewayConnection.voiceStateUpdate({
+                channelId: channel.id,
+                guildId: channel.guild_id,
+                selfMute,
+                selfDeaf
+            });
         }
     }
 }
@@ -153,22 +232,15 @@ export default definePlugin({
     start() {
         console.log("[FakeDeafen] Plugin démarré - Raccourci:", settings.store.keybind);
 
+        // Resolve and cache runtime modules once at startup.
+        resolveRuntimeModules();
+
         // Add keyboard listener
         document.addEventListener("keydown", handleKeyPress, true);
 
         // Patch voiceStateUpdate
-        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
-        if (!GatewayConnection || typeof GatewayConnection.voiceStateUpdate !== "function") {
+        if (!patchGatewayConnection()) {
             console.warn("[FakeDeafen] GatewayConnection.voiceStateUpdate not found");
-        } else {
-            originalVoiceStateUpdate = GatewayConnection.voiceStateUpdate;
-            GatewayConnection.voiceStateUpdate = function (args) {
-                if (fakeDeafenEnabled && args && typeof args === "object") {
-                    args.selfMute = true;
-                    args.selfDeaf = true;
-                }
-                return originalVoiceStateUpdate.apply(this, arguments);
-            };
         }
     },
 
@@ -178,13 +250,19 @@ export default definePlugin({
         // Remove keyboard listener
         document.removeEventListener("keydown", handleKeyPress, true);
 
-        // Restore original function
-        const GatewayConnection = findByProps("voiceStateUpdate", "voiceServerPing");
-        if (GatewayConnection && originalVoiceStateUpdate) {
-            GatewayConnection.voiceStateUpdate = originalVoiceStateUpdate;
+        // Restore original function using cached reference only.
+        if (patchedGatewayConnection && originalVoiceStateUpdate) {
+            patchedGatewayConnection.voiceStateUpdate = originalVoiceStateUpdate;
         }
 
         // Reset state
         fakeDeafenEnabled = false;
+        originalVoiceStateUpdate = null;
+        patchedGatewayConnection = null;
+        ChannelStore = null;
+        SelectedChannelStore = null;
+        GatewayConnection = null;
+        MediaEngineStore = null;
+        failedLookups.clear();
     }
 });
