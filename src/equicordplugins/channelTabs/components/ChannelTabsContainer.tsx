@@ -61,7 +61,10 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
         animationQuestsActive,
         compactAutoExpandSelected,
         compactAutoExpandOnHover,
-        newTabButtonBehavior
+        newTabButtonBehavior,
+        showTabBar,
+        enableToggleTabsShortcut,
+        toggleTabsKeybind
     } = settings.use([
         "showBookmarkBar",
         "widerTabsAndBookmarks",
@@ -94,7 +97,10 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
         "animationQuestsActive",
         "compactAutoExpandSelected",
         "compactAutoExpandOnHover",
-        "newTabButtonBehavior"
+        "newTabButtonBehavior",
+        "showTabBar",
+        "enableToggleTabsShortcut",
+        "toggleTabsKeybind"
     ]);
     const GhostTabs = useGhostTabs();
     const isFullscreen = useStateFromStores([ChannelRTCStore], () => ChannelRTCStore.isFullscreenInContext() ?? false);
@@ -248,6 +254,13 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
                 }
                 return;
             }
+
+            // 6. toggle tabs bar
+            if (enableToggleTabsShortcut && matchesKeybind(event, toggleTabsKeybind)) {
+                event.preventDefault();
+                settings.store.showTabBar = !settings.store.showTabBar;
+                return;
+            }
         };
 
         document.addEventListener("keydown", handleKeyDown, true);
@@ -265,6 +278,8 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
         enableTabCycleShortcut,
         cycleTabForwardKeybind,
         cycleTabBackwardKeybind,
+        enableToggleTabsShortcut,
+        toggleTabsKeybind,
         props,
         openedTabs
     ]);
@@ -289,6 +304,8 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
     if (!userId) return null;
 
     if (isFullscreen) return null;
+
+    if (!showTabBar) return null;
 
     const shouldFollowNewTabButton = newTabButtonBehavior && !tabsOverflow;
     const newTabButton = (
