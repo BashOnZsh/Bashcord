@@ -292,7 +292,29 @@ function ChannelTabContent(props: ChannelTabsProps & {
         }
     }
 
-    if (guildId === "@me" || guildId === undefined) {
+    if (!channel && (guildId === "@me" || guildId === undefined)) {
+        const user = UserStore.getUser(channelId) as User & { globalName: string; };
+        if (user) {
+            const username = noPomeloNames
+                ? user.globalName || user.username
+                : getUniqueUsername(user);
+
+            return (
+                <>
+                    <Avatar
+                        size="SIZE_24"
+                        src={user.getAvatarURL(undefined, 128)}
+                        status={showStatusIndicators ? status : undefined}
+                        isTyping={isTyping}
+                        isMobile={isMobile}
+                    />
+                    <BaseText className={cl("name-text")}>
+                        {username}
+                    </BaseText>
+                </>
+            );
+        }
+
         return (
             <>
                 <FriendsIcon />

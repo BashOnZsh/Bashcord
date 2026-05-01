@@ -5,17 +5,17 @@
  */
 
 import { BaseText } from "@components/BaseText";
-import { BasicChannelTabsProps, Bookmark, BookmarkFolder, BookmarkProps, getDiscordFolderIcon, isBookmarkFolder, isTabSelected, navigateToBookmark, openedTabs, settings, switchChannel, UseBookmarkMethods, useBookmarks } from "@equicordplugins/channelTabs/util";
+import { BasicChannelTabsProps, Bookmark, BookmarkFolder, BookmarkProps, getDiscordFolderIcon, isBookmarkFolder, isTabSelected, navigateToBookmark, openedTabs, settings, switchChannel, UseBookmarkMethods, useBookmarks, createTab } from "@equicordplugins/channelTabs/util";
 import { CircleQuestionIcon, DiscoveryIcon, EnvelopeIcon, FriendsIcon, NitroIcon, QuestIcon, ShopIcon } from "@equicordplugins/channelTabs/util/icons";
 import { classNameFactory } from "@utils/css";
 import { getGuildAcronym, getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { closeModal, openModal } from "@utils/modal";
 import { findComponentByCodeLazy } from "@webpack";
-import { Avatar, ChannelStore, ContextMenuApi, FluxDispatcher, GuildStore, Menu, React, ReadStateStore, ReadStateUtils, SelectedChannelStore, SelectedGuildStore, TextInput, Tooltip, useDrag, useDrop, useEffect, useRef, UserStore, useState } from "@webpack/common";
+import { Avatar, ChannelStore, ContextMenuApi, FluxDispatcher, GuildStore, Menu, React, ReadStateStore, ReadStateUtils, SelectedChannelStore, SelectedGuildStore, TextInput, Tooltip, useDrag, useDrop, useEffect, useRef, UserStore, useState, RestAPI, Constants, ChannelActionCreators } from "@webpack/common";
 
 import { NotificationDot } from "./ChannelTab";
-import { BookmarkContextMenu, EditModal } from "./ContextMenus";
+import { BookmarkContextMenu, EditModal, AddByIdModal } from "./ContextMenus";
 
 const cl = classNameFactory("vc-channeltabs-");
 
@@ -789,6 +789,71 @@ export default function BookmarkContainer(props: BasicChannelTabsProps & { userI
                     </button>}
                 </Tooltip>
             </div>
+
+            <Tooltip text="Add by ID" position="left">
+                {p => <button
+                    className={cl("button")}
+                    {...p}
+                    onClick={() => {
+                        const key = openModal(modalProps => (
+                            <AddByIdModal
+                                modalProps={modalProps}
+                                modalKey={key}
+                                onSave={async (id) => {
+                                    const channel = ChannelStore.getChannel(id);
+                                    if (channel) {
+                                        createTab({ guildId: channel.guild_id || "@me", channelId: id }, false);
+                                    } else {
+                                        const guild = GuildStore.getGuild(id);
+                                        if (guild) {
+                                            createTab({ guildId: id, channelId: "" }, false);
+                                        } else {
+                                            const dmId = ChannelStore.getDMFromUserId(id);
+                                            if (dmId) {
+                                                createTab({ guildId: "@me", channelId: dmId }, false);
+                                            } else {
+                                                let user = UserStore.getUser(id);
+                                                if (!user) {
+                                                    try {
+                                                        const response = await RestAPI.get({ url: Constants.Endpoints.USER(id) });
+                                                        if (response?.body) {
+                                                            FluxDispatcher.dispatch({
+                                                                type: "USER_UPDATE",
+                                                                user: response.body,
+                                                            });
+                                                        }
+                                                    } catch (e) {
+                                                        // Ignore, might not be a valid user
+                                                    }
+                                                }
+                                                
+                                                try {
+                                                    const dmResponse = await RestAPI.post({
+                                                        url: "/users/@me/channels",
+                                                        body: { recipients: [id] }
+                                                    });
+                                                    if (dmResponse?.body?.id) {
+                                                        createTab({ guildId: "@me", channelId: dmResponse.body.id }, false);
+                                                    } else {
+                                                        createTab({ guildId: "@me", channelId: id }, false);
+                                                    }
+                                                } catch (e) {
+                                                    createTab({ guildId: "@me", channelId: id }, false);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    closeModal(key);
+                                }}
+                            />
+                        ));
+                    }}
+                >
+                    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>}
+            </Tooltip>
 
             <Tooltip text={isCurrentChannelBookmarked ? "Remove from Bookmarks" : "Add to Bookmarks"} position="left" >
                 {p => <button className={cl("button")} {...p} onClick={() => {

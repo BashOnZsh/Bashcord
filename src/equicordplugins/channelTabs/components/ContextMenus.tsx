@@ -12,7 +12,7 @@ import { Bookmark, BookmarkFolder, Bookmarks, ChannelTabsProps, UseBookmarkMetho
 import { getIntlMessage } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import { closeModal, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
-import { Button, ChannelStore, ColorPicker, FluxDispatcher, Menu, ReadStateStore, ReadStateUtils, Select, TextInput, useMemo, useState } from "@webpack/common";
+import { Button, ChannelStore, ColorPicker, FluxDispatcher, Menu, ReadStateStore, ReadStateUtils, Select, TextInput, useMemo, useState, ChannelActions } from "@webpack/common";
 
 const legacyFolderColors: Record<string, string> = {
     "var(--channeltabs-red)": bookmarkFolderColors.Red,
@@ -399,6 +399,44 @@ function DeleteFolderConfirmationModal({ modalProps, modalKey, onConfirm }) {
     );
 }
 
+export function AddByIdModal({ modalProps, modalKey, onSave }: {
+    modalProps: ModalProps,
+    modalKey: string,
+    onSave: (id: string) => void;
+}) {
+    const [id, setId] = useState("");
+
+    return (
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Add by ID</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                <Paragraph className={Margins.top16}>
+                    Enter a Channel ID, Server ID, or User ID.
+                </Paragraph>
+                <TextInput
+                    value={id}
+                    placeholder="123456789012345678"
+                    onChange={setId}
+                    style={{ marginTop: 8 }}
+                />
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    onClick={() => onSave(id.trim())}
+                    disabled={!id.trim()}
+                >Add</Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >Cancel</Button>
+            </ModalFooter>
+        </ModalRoot>
+    );
+}
+
 export function BookmarkContextMenu({ bookmarks, index, methods }: { bookmarks: Bookmarks, index: number, methods: UseBookmarkMethods; }) {
     const { showBookmarkBar, bookmarkNotificationDot } = settings.use(["showBookmarkBar", "bookmarkNotificationDot"]);
     const bookmark = bookmarks[index];
@@ -516,6 +554,8 @@ export function TabContextMenu({ tab }: { tab: ChannelTabsProps; }) {
     const [compact, setCompact] = useState(tab.compact);
     const { showBookmarkBar } = settings.use(["showBookmarkBar"]);
 
+    const isVoice = channel && (channel.type === 2 || channel.type === 13 || channel.type === 1 || channel.type === 3);
+
     return (
         <Menu.Menu
             navId="channeltabs-tab-context"
@@ -523,6 +563,15 @@ export function TabContextMenu({ tab }: { tab: ChannelTabsProps; }) {
             aria-label="ChannelTabs Tab Context Menu"
         >
             <Menu.MenuGroup>
+                {isVoice &&
+                    <Menu.MenuItem
+                        id="connect-call"
+                        label="Connect to Call"
+                        action={() => {
+                            ChannelActions.selectVoiceChannel(channel.id);
+                        }}
+                    />
+                }
                 {channel &&
                     <Menu.MenuItem
                         id="mark-as-read"

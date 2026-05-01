@@ -1,10 +1,17 @@
-# Equicord Development Guidelines
+# Bashcord Development Guidelines
+
+## Repositories
+
+- **Bashcord**: https://github.com/BashOnZsh/Bashcord
+- **Bashotl**: https://github.com/BashOnZsh/Bashotl
+- **Bashbop**: https://github.com/BashOnZsh/Bashbop
 
 ## Critical Rules
 
 - **NEVER** edit existing license headers. New files use 2026.
 - Push back when the user idea is wrong or not correct.
 - **NEVER** git checkout files without explicit permission.
+- **ALWAYS** propose to run `git add / commit / push` once the build is validated by the user and confirmed to be functional.
 - Always verify components/functions arent deprecated before using.
 - **NEVER** use `any` for Discord objects. Import proper types from `@vencord/discord-types`.
 - Fix with smallest possible change. No refactoring unless explicitly asked.
@@ -133,7 +140,7 @@ replace: "$self.renderTypingUsers({ children: $& })"
 
 ```ts
 import { isPluginEnabled } from "@api/PluginManager";
-import otherPlugin from "@equicordplugins/otherPlugin";
+import otherPlugin from "@bashcordplugins/otherPlugin";
 if (!isPluginEnabled(otherPlugin.name)) return null;
 otherPlugin.someFunction();
 ```
