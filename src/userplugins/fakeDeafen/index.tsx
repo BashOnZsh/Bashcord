@@ -6,13 +6,15 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByProps } from "@webpack";
+import { findByProps, find } from "@webpack";
 import { React, useState } from "@webpack/common";
 import { Forms } from "@webpack/common";
 
 let originalVoiceStateUpdate: any;
 let patchedGatewayConnection: any;
 let fakeDeafenEnabled = false;
+let gatewayMethodName = "voiceStateUpdate";
+
 
 let ChannelStore: any;
 let SelectedChannelStore: any;
@@ -28,17 +30,44 @@ function safeFindByProps<T = any>(...props: string[]): T | null {
     }
 
     try {
-        const mod = findByProps(...props) as T;
-        return mod;
-    } catch {
-        failedLookups.add(lookupKey);
-        return null;
-    }
+        const mod = find((m: any) => m && typeof m === "object" && props.every(p => m[p] !== undefined));
+        if (mod) return mod as T;
+    } catch {}
+
+    failedLookups.add(lookupKey);
+    return null;
 }
 
 function resolveGatewayConnection() {
-    return safeFindByProps("voiceStateUpdate", "voiceServerPing")
-        ?? safeFindByProps("voiceStateUpdate");
+    let mod = find((m: any) => m && typeof m === "object" && typeof m.updateVoiceState === "function");
+    if (mod) {
+        gatewayMethodName = "updateVoiceState";
+        return mod;
+    }
+
+    mod = find((m: any) => m && typeof m === "object" && typeof m.voiceStateUpdate === "function");
+    if (mod) {
+        gatewayMethodName = "voiceStateUpdate";
+        return mod;
+    }
+
+    // Try finding via getSocket() if it exists
+    const getSocketMod = find((m: any) => m && typeof m === "object" && typeof m.getSocket === "function");
+    if (getSocketMod) {
+        const socket = getSocketMod.getSocket();
+        if (socket) {
+            if (typeof socket.updateVoiceState === "function") {
+                gatewayMethodName = "updateVoiceState";
+                return socket;
+            }
+            if (typeof socket.voiceStateUpdate === "function") {
+                gatewayMethodName = "voiceStateUpdate";
+                return socket;
+            }
+        }
+    }
+
+    return null;
 }
 
 function resolveRuntimeModules() {
@@ -58,12 +87,12 @@ function resolveRuntimeModules() {
 }
 
 function patchGatewayConnection() {
-    if (!GatewayConnection || typeof GatewayConnection.voiceStateUpdate !== "function") return false;
+    if (!GatewayConnection || typeof GatewayConnection[gatewayMethodName] !== "function") return false;
     if (patchedGatewayConnection === GatewayConnection && originalVoiceStateUpdate) return true;
 
-    originalVoiceStateUpdate = GatewayConnection.voiceStateUpdate;
+    originalVoiceStateUpdate = GatewayConnection[gatewayMethodName];
     patchedGatewayConnection = GatewayConnection;
-    GatewayConnection.voiceStateUpdate = function (args) {
+    GatewayConnection[gatewayMethodName] = function (args: any) {
         if (fakeDeafenEnabled && args && typeof args === "object") {
             args.selfMute = true;
             args.selfDeaf = true;
@@ -90,7 +119,7 @@ function getCurrentVoiceChannel() {
 function ensureRuntimeReadyForToggle() {
     resolveRuntimeModules();
     if (!patchGatewayConnection()) return false;
-    return Boolean(ChannelStore && SelectedChannelStore && typeof GatewayConnection?.voiceStateUpdate === "function");
+    return Boolean(ChannelStore && SelectedChannelStore && typeof GatewayConnection?.[gatewayMethodName] === "function");
 }
 
 function KeybindRecorder() {
@@ -204,7 +233,7 @@ function handleKeyPress(e: KeyboardEvent) {
         fakeDeafenEnabled = !fakeDeafenEnabled;
 
         if (fakeDeafenEnabled) {
-            GatewayConnection.voiceStateUpdate({
+            GatewayConnection[gatewayMethodName]({
                 channelId: channel.id,
                 guildId: channel.guild_id,
                 selfMute: true,
@@ -213,7 +242,7 @@ function handleKeyPress(e: KeyboardEvent) {
         } else {
             const selfMute = getSelfMuteState();
             const selfDeaf = getSelfDeafState();
-            GatewayConnection.voiceStateUpdate({
+            GatewayConnection[gatewayMethodName]({
                 channelId: channel.id,
                 guildId: channel.guild_id,
                 selfMute,
@@ -240,7 +269,7 @@ export default definePlugin({
 
         // Patch voiceStateUpdate
         if (!patchGatewayConnection()) {
-            console.warn("[FakeDeafen] GatewayConnection.voiceStateUpdate not found");
+            console.warn(`[FakeDeafen] GatewayConnection.${gatewayMethodName} not found`);
         }
     },
 
@@ -252,7 +281,7 @@ export default definePlugin({
 
         // Restore original function using cached reference only.
         if (patchedGatewayConnection && originalVoiceStateUpdate) {
-            patchedGatewayConnection.voiceStateUpdate = originalVoiceStateUpdate;
+            patchedGatewayConnection[gatewayMethodName] = originalVoiceStateUpdate;
         }
 
         // Reset state
