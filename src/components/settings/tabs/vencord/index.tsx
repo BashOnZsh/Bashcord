@@ -63,38 +63,45 @@ function EquicordSettings() {
         title: string;
         description?: string;
         restartRequired?: boolean;
-        warning?: string;
-    }>
-        = [
+        warning: { enabled: boolean; message?: string; };
+    }
+    > = [
             {
                 key: "useQuickCss",
                 title: "Enable Custom CSS",
                 description: "Load custom CSS from the QuickCSS editor. This allows you to customize Discord's appearance with your own styles.",
+                restartRequired: true,
+                warning: { enabled: false },
             },
             !IS_WEB && {
                 key: "enableReactDevtools",
                 title: "Enable React Developer Tools",
                 description: "Enable the React Developer Tools extension for debugging Discord's React components. Useful for plugin development.",
                 restartRequired: true,
+                warning: { enabled: false },
             },
             (!IS_WEB && !IS_DISCORD_DESKTOP || !IS_WINDOWS) && {
                 key: "mainWindowFrameless",
                 title: "Disable the Main Window Frame",
                 description: "Remove the native window frame for a cleaner look. You can still move the window by dragging the title bar area.",
                 restartRequired: true,
+                warning: { enabled: false },
             },
-            !IS_WEB && (!IS_DISCORD_DESKTOP || !IS_WINDOWS
+            !IS_WEB &&
+            (!IS_DISCORD_DESKTOP || !IS_WINDOWS
                 ? {
                     key: "frameless",
                     title: "Disable All Window Frames",
                     description: "Remove the native window frame for a cleaner look. You can still move the window by dragging the title bar area.",
                     restartRequired: true,
+                    warning: { enabled: false },
                 }
                 : {
                     key: "winNativeTitleBar",
                     title: "Use Windows' native title bar instead of Discord's custom one",
                     description: "Replace Discord's custom title bar with the standard Windows title bar. This may improve compatibility with some window management tools.",
                     restartRequired: true,
+                    warning: { enabled: false },
                 }
             ),
             !IS_WEB && {
@@ -102,21 +109,27 @@ function EquicordSettings() {
                 title: "Enable Window Transparency",
                 description: "Make the Discord window transparent. A theme that supports transparency is required or this will do nothing.",
                 restartRequired: true,
-                warning: IS_WINDOWS
-                    ? "This will stop the window from being resizable and prevents you from snapping the window to screen edges."
-                    : "This will stop the window from being resizable.",
+                warning: {
+                    enabled: true,
+                    message: IS_WINDOWS
+                        ? "This will stop the window from being resizable and prevents you from snapping the window to screen edges."
+                        : "This will stop the window from being resizable.",
+                },
             },
             IS_DISCORD_DESKTOP && {
                 key: "disableMinSize",
                 title: "Disable Minimum Window Size",
                 description: "Allow the Discord window to be resized smaller than its default minimum size. Useful for tiling window managers or small screens.",
                 restartRequired: true,
+                warning: { enabled: false },
             },
-            !IS_WEB && IS_WINDOWS && {
+            !IS_WEB &&
+            IS_WINDOWS && {
                 key: "winCtrlQ",
                 title: "Register Ctrl+Q as shortcut to close Discord",
                 description: "Add Ctrl+Q as a keyboard shortcut to close Discord. This provides an alternative to Alt+F4 for quickly closing the application.",
                 restartRequired: true,
+                warning: { enabled: false },
             },
         ];
 
@@ -189,11 +202,11 @@ function EquicordSettings() {
                         onChange={v => (settings[s.key] = v)}
                         title={s.title}
                         description={
-                            s.warning ? (
+                            s.warning.enabled ? (
                                 <>
                                     {s.description}
                                     <Notice.Warning className={Margins.top8} style={{ width: "100%" }}>
-                                        {s.warning}
+                                        {s.warning.message}
                                     </Notice.Warning>
                                 </>
                             ) : (
