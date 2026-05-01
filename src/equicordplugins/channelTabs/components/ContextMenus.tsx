@@ -412,14 +412,15 @@ export function AddByIdModal({ modalProps, modalKey, onSave }: {
                 <BaseText size="lg" weight="semibold">Add by ID</BaseText>
             </ModalHeader>
             <ModalContent>
-                <Paragraph className={Margins.top16}>
+                <Paragraph className={Margins.top16} style={{ textAlign: "center", marginBottom: 8 }}>
                     Enter a Channel ID, Server ID, or User ID.
                 </Paragraph>
                 <TextInput
                     value={id}
                     placeholder="123456789012345678"
                     onChange={setId}
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 12, marginBottom: 16 }}
+                    inputStyle={{ textAlign: "center", fontSize: "16px", letterSpacing: "1px" }}
                 />
             </ModalContent>
             <ModalFooter>
