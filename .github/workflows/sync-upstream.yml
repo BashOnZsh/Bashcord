@@ -3,7 +3,7 @@ name: Sync Upstream Equicord
 on:
     workflow_dispatch:
     schedule:
-        - cron: "0 6 * * *" # tous les jours à 6h UTC
+        - cron: "0 * * * *" # Toutes les heures
 
 permissions:
     contents: write
@@ -31,7 +31,21 @@ jobs:
             - name: Fetch upstream
               run: git fetch upstream
 
+            - name: Check for upstream changes
+              id: check
+              run: |
+                  UPSTREAM_COMMIT=$(git rev-parse upstream/main)
+                  # On vérifie si upstream est en avance sur notre branche main
+                  if git merge-base --is-ancestor upstream/main main; then
+                    echo "No new changes in upstream. Skipping sync."
+                    echo "sync_needed=false" >> $GITHUB_OUTPUT
+                  else
+                    echo "Upstream is ahead. Syncing needed."
+                    echo "sync_needed=true" >> $GITHUB_OUTPUT
+                  fi
+
             - name: Save protected files
+              if: steps.check.outputs.sync_needed == 'true'
               run: |
                   if [ ! -f .sync-upstream-protected ]; then
                     echo "Missing .sync-upstream-protected"
@@ -61,6 +75,7 @@ jobs:
                   done
 
             - name: Rebase on upstream/main
+              if: steps.check.outputs.sync_needed == 'true'
               run: |
                   set -euo pipefail
                   git checkout main
@@ -113,6 +128,7 @@ jobs:
                   done
 
             - name: Restore protected files
+              if: steps.check.outputs.sync_needed == 'true'
               run: |
                   while IFS= read -r entry; do
                     [ -z "$entry" ] && continue
@@ -132,4 +148,5 @@ jobs:
                   git diff --cached --quiet || git commit -m "chore: restore protected files after upstream sync"
 
             - name: Push rebased branch
+              if: steps.check.outputs.sync_needed == 'true'
               run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
