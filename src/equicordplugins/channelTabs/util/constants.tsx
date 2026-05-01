@@ -124,11 +124,11 @@ export const settings = definePluginSettings({
         description: "On startup",
         options: [{
             label: "Do nothing (open on the friends tab)",
-            value: "nothing",
-            default: true
+            value: "nothing"
         }, {
             label: "Remember tabs from last session",
-            value: "remember"
+            value: "remember",
+            default: true
         }, {
             label: "Open on a specific set of tabs",
             value: "preset"
@@ -151,6 +151,11 @@ export const settings = definePluginSettings({
     },
     showBookmarkBar: {
         description: "",
+        type: OptionType.BOOLEAN,
+        default: true
+    },
+    showTabBar: {
+        description: "Show the tabs bar",
         type: OptionType.BOOLEAN,
         default: true
     },
@@ -255,6 +260,12 @@ export const settings = definePluginSettings({
         default: true,
         restartNeeded: false
     },
+    enableToggleTabsShortcut: {
+        type: OptionType.BOOLEAN,
+        description: "Enable toggle tabs keyboard shortcut",
+        default: true,
+        restartNeeded: false
+    },
     keybindsSection: {
         type: OptionType.COMPONENT,
         component: KeybindSettings
@@ -282,6 +293,12 @@ export const settings = definePluginSettings({
         type: OptionType.STRING,
         description: "Keyboard shortcut to cycle to the previous tab",
         default: "CTRL+SHIFT+TAB",
+        hidden: true
+    },
+    toggleTabsKeybind: {
+        type: OptionType.STRING,
+        description: "Keyboard shortcut to toggle the tabs bar",
+        default: "CTRL+B",
         hidden: true
     },
     showTabNumbers: {
