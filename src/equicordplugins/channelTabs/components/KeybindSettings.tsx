@@ -16,8 +16,8 @@ import { JSX } from "react";
 interface KeybindInputProps {
     label: string;
     description: string;
-    settingKey: "closeTabKeybind" | "newTabKeybind" | "cycleTabForwardKeybind" | "cycleTabBackwardKeybind";
-    enabledKey?: "enableCloseTabShortcut" | "enableNewTabShortcut" | "enableTabCycleShortcut";
+    settingKey: "closeTabKeybind" | "newTabKeybind" | "cycleTabForwardKeybind" | "cycleTabBackwardKeybind" | "toggleTabsKeybind";
+    enabledKey?: "enableCloseTabShortcut" | "enableNewTabShortcut" | "enableTabCycleShortcut" | "enableToggleTabsShortcut";
 }
 
 function KeybindInput({ label, description, settingKey, enabledKey }: KeybindInputProps) {
@@ -64,7 +64,8 @@ function KeybindInput({ label, description, settingKey, enabledKey }: KeybindInp
                 closeTabKeybind: settings.store.closeTabKeybind,
                 newTabKeybind: settings.store.newTabKeybind,
                 cycleTabForwardKeybind: settings.store.cycleTabForwardKeybind,
-                cycleTabBackwardKeybind: settings.store.cycleTabBackwardKeybind
+                cycleTabBackwardKeybind: settings.store.cycleTabBackwardKeybind,
+                toggleTabsKeybind: settings.store.toggleTabsKeybind
             };
 
             // Check if this keybind is already used by another setting
@@ -104,7 +105,8 @@ function KeybindInput({ label, description, settingKey, enabledKey }: KeybindInp
             closeTabKeybind: "CTRL+W",
             newTabKeybind: "CTRL+T",
             cycleTabForwardKeybind: "CTRL+TAB",
-            cycleTabBackwardKeybind: "CTRL+SHIFT+TAB"
+            cycleTabBackwardKeybind: "CTRL+SHIFT+TAB",
+            toggleTabsKeybind: "CTRL+B"
         };
         settings.store[settingKey] = defaults[settingKey];
         setError(null);
@@ -175,6 +177,7 @@ export function KeybindSettings(): JSX.Element {
         settings.store.newTabKeybind = "CTRL+T";
         settings.store.cycleTabForwardKeybind = "CTRL+TAB";
         settings.store.cycleTabBackwardKeybind = "CTRL+SHIFT+TAB";
+        settings.store.toggleTabsKeybind = "CTRL+B";
     };
 
     return (
@@ -212,6 +215,13 @@ export function KeybindSettings(): JSX.Element {
                     description="Switch to the previous tab (wraps around to last)"
                     settingKey="cycleTabBackwardKeybind"
                     enabledKey="enableTabCycleShortcut"
+                />
+
+                <KeybindInput
+                    label="Toggle Tabs Bar"
+                    description="Show or hide the tabs bar"
+                    settingKey="toggleTabsKeybind"
+                    enabledKey="enableToggleTabsShortcut"
                 />
 
                 <div style={{ marginTop: "16px" }}>
