@@ -22,3 +22,4 @@ vencordplugins.json
 equicordplugins.json
 devs.json
 src/equicordplugins/channelTabs
+src/equicordplugins/_core/refreshActiveNow.ts
