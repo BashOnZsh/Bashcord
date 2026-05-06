@@ -5,14 +5,14 @@
  */
 
 import { showNotice } from "@api/Notices";
-import { hasAnyVisibleSettings, isPluginEnabled, pluginRequiresRestart, startDependenciesRecursive, startPlugin, stopPlugin } from "@api/PluginManager";
-import { Settings } from "@api/Settings";
+import { isPluginEnabled, pluginRequiresRestart, startDependenciesRecursive, startPlugin, stopPlugin } from "@api/PluginManager";
 import { CogWheel, InfoIcon } from "@components/Icons";
 import { AddonCard } from "@components/settings/AddonCard";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
-import { Plugin } from "@utils/types";
+import { OptionType, Plugin } from "@utils/types";
 import { React, showToast, Toasts } from "@webpack/common";
+import { Settings } from "Vencord";
 
 import { PluginMeta } from "~plugins";
 
@@ -146,7 +146,7 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
                     onClick={() => openPluginModal(plugin, onRestartNeeded)}
                     className={cl("info-button")}
                 >
-                    {hasAnyVisibleSettings(plugin)
+                    {plugin.settings?.def && Object.values(plugin.settings.def).some(s => s.type !== OptionType.CUSTOM && !s.hidden)
                         ? <CogWheel className={cl("info-icon")} />
                         : <InfoIcon className={cl("info-icon")} />
                     }
