@@ -19,7 +19,6 @@
 import "./PluginModal.css";
 
 import { generateId } from "@api/Commands";
-import { hasAnyVisibleSettings, isSettingHidden } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
@@ -77,7 +76,7 @@ export function makeDummyUser(user: { username: string; id?: string; avatar?: st
 
 export default function PluginModal({ plugin, onRestartNeeded, onClose, transitionState }: PluginModalProps) {
     const pluginSettings = useSettings([`plugins.${plugin.name}.*`]).plugins[plugin.name];
-    const hasSettings = hasAnyVisibleSettings(plugin);
+    const hasSettings = Boolean(pluginSettings && plugin.options && !isObjectEmpty(plugin.options));
 
     // avoid layout shift by showing dummy users while loading users
     const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
@@ -110,17 +109,14 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }
 
     function renderSettings() {
-        const { settings } = plugin;
-        if (!hasSettings || !settings)
+        if (!hasSettings || !plugin.options)
             return <Paragraph>There are no settings for this plugin.</Paragraph>;
 
-        const options = Object.entries(settings.def).map(([key, setting]) => {
-            if (setting.type === OptionType.CUSTOM) return null;
-
-            if (isSettingHidden(settings, setting)) return null;
+        const options = Object.entries(plugin.options).map(([key, setting]) => {
+            if (setting.type === OptionType.CUSTOM || setting.hidden) return null;
 
             function onChange(newValue: any) {
-                const option = plugin.settings!.def[key];
+                const option = plugin.options?.[key];
                 if (!option || option.type === OptionType.CUSTOM) return;
 
                 pluginSettings[key] = newValue;
@@ -133,10 +129,10 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                 <ErrorBoundary noop key={key}>
                     <Component
                         id={key}
-                        setting={setting}
+                        option={setting}
                         onChange={debounce(onChange)}
                         pluginSettings={pluginSettings}
-                        definedSettings={settings}
+                        definedSettings={plugin.settings}
                     />
                 </ErrorBoundary>
             );

@@ -16,19 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { isSettingDisabled } from "@api/PluginManager";
-import { PluginSettingSliderDef } from "@utils/types";
+import { PluginOptionSlider } from "@utils/types";
 import { React, Slider, useState } from "@webpack/common";
 
 import { resolveError, SettingProps, SettingsSection } from "./Common";
 
-export function SliderSetting({ setting, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginSettingSliderDef>) {
-    const def = pluginSettings[id] ?? setting.default;
+export function SliderSetting({ option, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginOptionSlider>) {
+    const def = pluginSettings[id] ?? option.default;
 
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: number): void {
-        const isValid = setting.isValid?.call(definedSettings, newValue) ?? true;
+        const isValid = option.isValid?.call(definedSettings, newValue) ?? true;
 
         setError(resolveError(isValid));
 
@@ -38,17 +37,17 @@ export function SliderSetting({ setting, pluginSettings, definedSettings, id, on
     }
 
     return (
-        <SettingsSection name={id} description={setting.description} error={error}>
+        <SettingsSection name={id} description={option.description} error={error}>
             <Slider
-                markers={setting.markers}
-                minValue={setting.markers[0]}
-                maxValue={setting.markers[setting.markers.length - 1]}
+                markers={option.markers}
+                minValue={option.markers[0]}
+                maxValue={option.markers[option.markers.length - 1]}
                 initialValue={def}
                 onValueChange={handleChange}
                 onValueRender={(v: number) => String(v.toFixed(2))}
-                stickToMarkers={setting.stickToMarkers ?? true}
-                disabled={isSettingDisabled(definedSettings, setting)}
-                {...setting.componentProps}
+                stickToMarkers={option.stickToMarkers ?? true}
+                disabled={option.disabled?.call(definedSettings) ?? false}
+                {...option.componentProps}
             />
         </SettingsSection>
     );
