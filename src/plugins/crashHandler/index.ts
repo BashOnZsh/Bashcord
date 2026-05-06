@@ -63,6 +63,7 @@ export default definePlugin({
     authors: [Devs.Nuckyz],
     tags: ["Utility", "Developers"],
     enabledByDefault: true,
+    required: true,
     settings,
 
     patches: [
