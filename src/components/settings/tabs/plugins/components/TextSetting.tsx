@@ -16,18 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { isSettingDisabled } from "@api/PluginManager";
-import { PluginSettingStringDef } from "@utils/types";
+import { PluginOptionString } from "@utils/types";
 import { React, TextArea, TextInput, useState } from "@webpack/common";
 
 import { resolveError, SettingProps, SettingsSection } from "./Common";
 
-export function TextSetting({ setting, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginSettingStringDef>) {
-    const [state, setState] = useState(pluginSettings[id] ?? setting.default ?? null);
+export function TextSetting({ option, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginOptionString>) {
+    const [state, setState] = useState(pluginSettings[id] ?? option.default ?? null);
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: string) {
-        const isValid = setting.isValid?.call(definedSettings, newValue) ?? true;
+        const isValid = option.isValid?.call(definedSettings, newValue) ?? true;
 
         setState(newValue);
         setError(resolveError(isValid));
@@ -38,22 +37,22 @@ export function TextSetting({ setting, pluginSettings, definedSettings, id, onCh
     }
 
     return (
-        <SettingsSection name={id} description={setting.description} error={error}>
-            {setting.multiline
+        <SettingsSection name={id} description={option.description} error={error}>
+            {option.multiline
                 ? <TextArea
-                    placeholder={setting.placeholder ?? "Enter a value"}
+                    placeholder={option.placeholder ?? "Enter a value"}
                     value={state}
                     onChange={handleChange}
-                    disabled={isSettingDisabled(definedSettings, setting)}
-                    {...setting.componentProps} />
+                    disabled={option.disabled?.call(definedSettings) ?? false}
+                    {...option.componentProps} />
                 : <TextInput
                     type="text"
-                    placeholder={setting.placeholder ?? "Enter a value"}
+                    placeholder={option.placeholder ?? "Enter a value"}
                     value={state}
                     onChange={handleChange}
                     maxLength={null}
-                    disabled={isSettingDisabled(definedSettings, setting)}
-                    {...setting.componentProps}
+                    disabled={option.disabled?.call(definedSettings) ?? false}
+                    {...option.componentProps}
                 />
             }
         </SettingsSection>

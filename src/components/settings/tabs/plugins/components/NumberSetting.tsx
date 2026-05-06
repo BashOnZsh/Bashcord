@@ -16,25 +16,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { isSettingDisabled } from "@api/PluginManager";
-import { OptionType, PluginSettingBigIntDef, PluginSettingNumberDef } from "@utils/types";
+import { OptionType, PluginOptionNumber } from "@utils/types";
 import { React, TextInput, useState } from "@webpack/common";
 
 import { resolveError, SettingProps, SettingsSection } from "./Common";
 
 const MAX_SAFE_NUMBER = BigInt(Number.MAX_SAFE_INTEGER);
 
-export function NumberSetting({ setting, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginSettingNumberDef | PluginSettingBigIntDef>) {
+export function NumberSetting({ option, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginOptionNumber>) {
     function serialize(value: any) {
-        if (setting.type === OptionType.BIGINT) return BigInt(value);
+        if (option.type === OptionType.BIGINT) return BigInt(value);
         return Number(value);
     }
 
-    const [state, setState] = useState<any>(`${pluginSettings[id] ?? setting.default ?? 0}`);
+    const [state, setState] = useState<any>(`${pluginSettings[id] ?? option.default ?? 0}`);
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: any) {
-        const isValid = setting.isValid?.call(definedSettings, newValue) ?? true;
+        const isValid = option.isValid?.call(definedSettings, newValue) ?? true;
 
         setError(resolveError(isValid));
 
@@ -42,7 +41,7 @@ export function NumberSetting({ setting, pluginSettings, definedSettings, id, on
             onChange(serialize(newValue));
         }
 
-        if (setting.type === OptionType.NUMBER && BigInt(newValue) >= MAX_SAFE_NUMBER) {
+        if (option.type === OptionType.NUMBER && BigInt(newValue) >= MAX_SAFE_NUMBER) {
             setState(`${Number.MAX_SAFE_INTEGER}`);
         } else {
             setState(newValue);
@@ -50,15 +49,15 @@ export function NumberSetting({ setting, pluginSettings, definedSettings, id, on
     }
 
     return (
-        <SettingsSection name={id} description={setting.description} error={error}>
+        <SettingsSection name={id} description={option.description} error={error}>
             <TextInput
                 type="number"
                 pattern="-?[0-9]+"
-                placeholder={setting.placeholder ?? "Enter a number"}
+                placeholder={option.placeholder ?? "Enter a number"}
                 value={state}
                 onChange={handleChange}
-                disabled={isSettingDisabled(definedSettings, setting)}
-                {...setting.componentProps}
+                disabled={option.disabled?.call(definedSettings) ?? false}
+                {...option.componentProps}
             />
         </SettingsSection>
     );
