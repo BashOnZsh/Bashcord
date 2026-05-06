@@ -39,9 +39,11 @@ function AnimationSettings(): JSX.Element {
         { label: "Active Quests Gradient", value: "quests-active", selected: settings.store.animationQuestsActive }
     ];
 
-    const [currentValue, setCurrentValue] = useState(animationOptions.filter(option => option.selected).map(option => option.value));
+    const [currentValue, setCurrentValue] = useState(animationOptions.filter(option => option.selected));
 
-    function updateSettingsTruthy(enabledValues: string[]) {
+    function updateSettingsTruthy(enabled: DynamicDropdownSettingOption[]) {
+        const enabledValues = enabled.map(option => option.value);
+
         animationOptions.forEach(option => {
             option.selected = enabledValues.includes(option.value);
         });
@@ -62,24 +64,23 @@ function AnimationSettings(): JSX.Element {
         settings.store.animationResizeHandle = enabledValues.includes("resize-handle");
         settings.store.animationQuestsActive = enabledValues.includes("quests-active");
 
-        setCurrentValue(enabledValues);
+        setCurrentValue(enabled);
     }
 
     function handleChange(values: Array<DynamicDropdownSettingOption | string>) {
-        const valueStrings = values.map(v => typeof v === "string" ? v : v.value);
-        const toggled = valueStrings.length > currentValue.length
-            ? valueStrings.find(v => !currentValue.includes(v))
-            : currentValue.find(v => !valueStrings.includes(v));
-
-        if (toggled == null) {
-            updateSettingsTruthy(valueStrings);
+        if (values.length === 0) {
+            updateSettingsTruthy([]);
             return;
         }
 
-        if (currentValue.includes(toggled)) {
-            updateSettingsTruthy(currentValue.filter(v => v !== toggled));
+        const stringlessValues = values.filter(v => typeof v !== "string") as DynamicDropdownSettingOption[];
+        const selectedOption = values.find(v => typeof v === "string") as string;
+        const option = animationOptions.find(option => option.value === selectedOption) as DynamicDropdownSettingOption;
+
+        if (option.selected) {
+            updateSettingsTruthy(stringlessValues.filter(v => v.value !== selectedOption));
         } else {
-            updateSettingsTruthy([...currentValue, toggled]);
+            updateSettingsTruthy([...stringlessValues, option]);
         }
     }
 
