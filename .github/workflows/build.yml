@@ -11,9 +11,7 @@ on:
 
 env:
     FORCE_COLOR: true
-    GITHUB_TOKEN: ${{ secrets.ETOKEN }}
-    REPO: Equicord/Equibored
-    USERNAME: GitHub-Actions
+    REPO: BashOnZsh/Bashcord
 
 permissions:
     contents: write
@@ -24,19 +22,19 @@ concurrency:
 
 jobs:
     Build:
-        name: Build Equicord
+        name: Build Bashcord
         runs-on: ubuntu-latest
         if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v4
 
-            - uses: pnpm/action-setup@v6
+            - uses: pnpm/action-setup@v3
 
-            - name: Use Node.js 24
-              uses: actions/setup-node@v6
+            - name: Use Node.js 20
+              uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 20
                   cache: "pnpm"
 
             - name: Install dependencies
@@ -96,22 +94,32 @@ jobs:
                   rm release/package.json
                   rm release/*.map
 
-            - name: Upload Equicord Stable
-              if: ${{ vars.ACT == 'false' }}
+            - name: Upload Bashcord Stable
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
-                gh release view latest >/dev/null 2>&1 || gh release create latest --target "$GITHUB_SHA" --title "Latest" --notes "Rolling release"
+                  SHORT_SHA="${GITHUB_SHA::7}"
+                  RELEASE_TITLE="Latest ${SHORT_SHA}"
+                  RELEASE_NOTES="Rolling release\n\nCommit: ${GITHUB_SHA}"
+
+                  if gh release view latest >/dev/null 2>&1; then
+                    gh release edit latest --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes "$RELEASE_NOTES"
+                  else
+                    gh release create latest --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes "$RELEASE_NOTES"
+                  fi
                   gh release upload latest --clobber dist/release/*
 
-            - name: Upload Plugin JSONs to Equibored repo
-              if: github.repository == 'Equicord/Equicord' && vars.ACT == 'false'
+            - name: Upload Plugin JSONs to Bashcord repo
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   git config --global user.name "GitHub-Actions"
                   git config --global user.email actions@github.com
-                  git clone https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git plugins
+                  git clone https://x-access-token:$GH_TOKEN@github.com/$REPO.git plugins
                   cd plugins
 
                   cp ../dist/release/*.json .
                   git add -A
 
-                  git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
-                  git push --force https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git
+                  git diff --cached --quiet || git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+                  git push --force https://x-access-token:$GH_TOKEN@github.com/$REPO.git
