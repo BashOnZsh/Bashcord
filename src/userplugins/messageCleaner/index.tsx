@@ -7,20 +7,165 @@
 import { definePluginSettings } from "@api/Settings";
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, Menu, RestAPI, UserStore } from "@webpack/common";
-import { Channel, Message } from "discord-types/general";
+import { ChannelStore, GuildStore, Menu, RestAPI, UserStore } from "@webpack/common";
+import { Channel, Message, Guild } from "discord-types/general";
+function flattenGuildChannels(container: any): any[] {
+    if (!container) return [];
+    if (Array.isArray(container)) return container;
+
+    if (Array.isArray(container.SELECTABLE)) {
+        return container.SELECTABLE.map((entry: any) => entry?.channel ?? entry).filter(Boolean);
+    }
+
+    if (Array.isArray(container.channels)) {
+        return container.channels.map((entry: any) => entry?.channel ?? entry).filter(Boolean);
+    }
+
+    if (typeof container === "object") {
+        return Object.values(container).map((entry: any) => entry?.channel ?? entry).filter(Boolean);
+    }
+
+    return [];
+}
+
+function getGuildChannels(guildId: string): any[] {
+    const cs: any = ChannelStore;
+
+    if (typeof cs.getChannelIds === "function") {
+        const ids = cs.getChannelIds(guildId);
+        if (Array.isArray(ids)) {
+            return ids.map((id: string) => ChannelStore.getChannel(id)).filter(Boolean);
+        }
+    }
+
+    if (typeof cs.getMutableGuildChannels === "function") {
+        return flattenGuildChannels(cs.getMutableGuildChannels(guildId));
+    }
+
+    if (typeof cs.getGuildChannels === "function") {
+        return flattenGuildChannels(cs.getGuildChannels(guildId));
+    }
+
+    if (typeof cs.getAllChannels === "function") {
+        const all = cs.getAllChannels();
+        return flattenGuildChannels(all).filter((ch: any) => ch.guild_id === guildId);
+    }
+
+    if (cs.channels) {
+        return flattenGuildChannels(cs.channels).filter((ch: any) => ch.guild_id === guildId);
+    }
+
+    log(`Impossible de récupérer la liste des salons. Méthodes dispo: ${Object.keys(cs).join(", ")}`, "error");
+    return [];
+}
+
+// Fonction pour nettoyer tous les salons textuels d'un serveur
+async function cleanGuild(guildId: string) {
+    if (isCleaningInProgress) {
+        log("Un nettoyage est déjà en cours", "warn");
+        return;
+    }
+    const guild: Guild | undefined = GuildStore.getGuild(guildId);
+    if (!guild) {
+        log("Serveur introuvable", "error");
+        return;
+    }
+    isCleaningInProgress = true;
+    shouldStopCleaning = false;
+    cleaningStats = {
+        total: 0,
+        deleted: 0,
+        failed: 0,
+        skipped: 0,
+        startTime: Date.now()
+    };
+
+    try {
+        const currentUserId = UserStore.getCurrentUser()?.id;
+        if (!currentUserId) {
+            log("Impossible d'obtenir l'ID de l'utilisateur actuel", "error");
+            return;
+        }
+
+        log(`🧹 Nettoyage du serveur (1 seule requete de recherche): ${guild.name}`);
+        const messages = await getGuildMessagesByAuthorOnce(guildId, currentUserId);
+
+        if (messages.length === 0) {
+            log("Aucun message trouve par la recherche serveur", "warn");
+            return;
+        }
+
+        const validMessages = messages.filter(msg => canDeleteMessage(msg, currentUserId));
+        cleaningStats.total = validMessages.length;
+
+        if (validMessages.length === 0) {
+            log("Aucun message supprimable trouve par la recherche serveur", "warn");
+            return;
+        }
+
+        log(`🧹 Suppression de ${validMessages.length} message(s) trouves par recherche serveur`);
+        let processed = 0;
+        for (const message of validMessages) {
+            if (shouldStopCleaning) break;
+
+            const success = await deleteMessage(message.channel_id, message.id);
+            if (success) {
+                cleaningStats.deleted++;
+            } else {
+                cleaningStats.failed++;
+            }
+
+            processed++;
+            if (settings.store.delayBetweenDeletes > 0) {
+                await sleep(settings.store.delayBetweenDeletes);
+            }
+            if (processed % 10 === 0) {
+                updateProgress();
+            }
+        }
+
+        cleaningStats.skipped += messages.length - validMessages.length;
+        log(`✅ Nettoyage du serveur terminé : ${guild.name}`);
+    } finally {
+        isCleaningInProgress = false;
+    }
+}
+// Patch du menu contextuel des serveurs
+const GuildContextMenuPatch: NavContextMenuPatchCallback = (children, ctx: { guild?: Guild; } = {}) => {
+    const { guild } = ctx;
+    if (!guild) return;
+
+    const group = findGroupChildrenByChildId("guild-header", children) ?? children;
+
+    if (group) {
+        const menuItems = [<Menu.MenuSeparator key="separator-guild" />];
+
+        if (isCleaningInProgress) {
+            menuItems.push(
+                <Menu.MenuItem
+                    key="cleaning-status-guild"
+                    id="vc-cleaning-status-guild"
+                    label={`🔄 Nettoyage en cours (serveur)`}
+                    color="brand"
+                    disabled={true}
+                />
+            );
+        } else {
+            menuItems.push(
+                <Menu.MenuItem
+                    key="clean-guild-messages"
+                    id="vc-clean-guild-messages"
+                    label="🧹 Nettoyer tous les messages du serveur"
+                    color="danger"
+                    action={() => cleanGuild(guild.id)}
+                />
+            );
+        }
+        group.push(...menuItems);
+    }
+};
 
 const settings = definePluginSettings({
-    enabled: {
-        type: OptionType.BOOLEAN,
-        description: "Activer le plugin MessageCleaner",
-        default: true
-    },
-    targetChannelId: {
-        type: OptionType.STRING,
-        description: "ID du canal à nettoyer (laisser vide pour utiliser le menu contextuel)",
-        default: ""
-    },
     delayBetweenDeletes: {
         type: OptionType.SLIDER,
         description: "Délai entre chaque suppression (ms) - pour éviter le rate limit",
@@ -47,7 +192,7 @@ const settings = definePluginSettings({
     debugMode: {
         type: OptionType.BOOLEAN,
         description: "Mode débogage (logs détaillés)",
-        default: true
+        default: false
     },
     skipSystemMessages: {
         type: OptionType.BOOLEAN,
@@ -96,6 +241,10 @@ function log(message: string, level: "info" | "warn" | "error" = "info") {
         default:
             console.log(prefix, message);
     }
+}
+
+function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Log de débogage
@@ -247,6 +396,37 @@ async function getChannelMessages(channelId: string, before?: string): Promise<M
     }
 }
 
+// Récupérer les messages d'un utilisateur dans un serveur (une seule requête)
+async function getGuildMessagesByAuthorOnce(guildId: string, userId: string): Promise<Message[]> {
+    try {
+        const limit = 25;
+        const url = `/guilds/${guildId}/messages/search?author_id=${userId}&include_nsfw=true&limit=${limit}`;
+        debugLog(`Recherche des messages (1 seule requete): ${url}`);
+
+        const response = await RestAPI.get({ url });
+        const body = response?.body;
+        const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+
+        const flattened: Message[] = [];
+        for (const entry of rawMessages) {
+            if (Array.isArray(entry) && entry[0]) {
+                flattened.push(entry[0]);
+            } else if (entry) {
+                flattened.push(entry);
+            }
+        }
+
+        debugLog(`Recherche: ${flattened.length} message(s) recu(s)`);
+        return flattened;
+    } catch (error: any) {
+        const errorMessage = error?.message || error?.toString() || "Erreur inconnue";
+        const statusCode = error?.status || error?.statusCode || "N/A";
+
+        log(`❌ Erreur lors de la recherche des messages serveur: ${errorMessage} (Status: ${statusCode})`, "error");
+        return [];
+    }
+}
+
 // Fonction pour afficher la progression
 function updateProgress() {
     if (!settings.store.showProgress) return;
@@ -273,13 +453,8 @@ function updateProgress() {
 }
 
 // Fonction principale de nettoyage
-async function cleanChannel(channelId: string) {
-    if (!settings.store.enabled) {
-        log("Plugin désactivé", "warn");
-        return;
-    }
-
-    if (isCleaningInProgress) {
+async function cleanChannel(channelId: string, options?: { skipSessionControl?: boolean }) {
+    if (!options?.skipSessionControl && isCleaningInProgress) {
         log("Un nettoyage est déjà en cours", "warn");
         return;
     }
@@ -303,47 +478,29 @@ async function cleanChannel(channelId: string) {
             return user?.username || "Utilisateur inconnu";
         }).join(", ") || "Canal privé";
 
-        // Estimation initiale du nombre de messages
+        // Analyse rapide du canal
         log(`🔍 Analyse du canal "${channelName}"...`);
-        let estimatedTotal = 0;
-        let lastMessageId: string | undefined;
-
-        // Compter approximativement les messages
-        for (let i = 0; i < 10; i++) { // Maximum 10 batches pour l'estimation
-            const messages = await getChannelMessages(channelId, lastMessageId);
-            if (messages.length === 0) break;
-
-            const validMessages = messages.filter(msg => canDeleteMessage(msg, currentUserId));
-            estimatedTotal += validMessages.length;
-            lastMessageId = messages[messages.length - 1].id;
-
-            if (messages.length < settings.store.batchSize) break;
-        }
-
-        if (estimatedTotal === 0) {
-            log("Aucun message à supprimer trouvé", "warn");
-            return;
-        }
-
-
-        log(`📊 Estimation: ${estimatedTotal} messages à supprimer`);
         log(`⚙️ Configuration: délai ${settings.store.delayBetweenDeletes}ms, batch ${settings.store.batchSize}`);
 
         // Initialiser les statistiques
-        isCleaningInProgress = true;
-        shouldStopCleaning = false;
+        if (!options?.skipSessionControl) {
+            isCleaningInProgress = true;
+            shouldStopCleaning = false;
+        }
         cleaningStats = {
-            total: estimatedTotal,
+            total: 0,
             deleted: 0,
             failed: 0,
             skipped: 0,
             startTime: Date.now()
         };
 
-        log(`🧹 Début du nettoyage de "${channelName}" - ${estimatedTotal} message(s) estimé(s)`);
+        log(`🧹 Début du nettoyage de "${channelName}"`);
 
-        lastMessageId = undefined;
+        let lastMessageId: string | undefined;
         let totalProcessed = 0;
+        let emptyValidBatches = 0;
+        const maxEmptyValidBatches = 1;
 
         // Boucle principale de nettoyage
         while (!shouldStopCleaning) {
@@ -370,9 +527,17 @@ async function cleanChannel(channelId: string) {
                     // Si aucun message valide dans ce batch, passer au suivant
                     lastMessageId = messages[messages.length - 1].id;
                     cleaningStats.skipped += messages.length;
+                    emptyValidBatches++;
                     debugLog(`Aucun message valide dans ce batch, passage au suivant`);
+                    if (emptyValidBatches >= maxEmptyValidBatches) {
+                        log("Aucun message supprimable trouve dans le dernier batch, arret pour limiter les requetes", "warn");
+                        break;
+                    }
+                    await sleep(400);
                     continue;
                 }
+
+                emptyValidBatches = 0;
 
                 // Supprimer les messages un par un
                 for (const message of validMessages) {
@@ -405,10 +570,11 @@ async function cleanChannel(channelId: string) {
                 }
 
                 // Messages non valides comptés comme ignorés
-                const invalidMessages = messages.filter(msg => !canDeleteMessage(msg, currentUserId));
-                cleaningStats.skipped += invalidMessages.length;
+                cleaningStats.skipped += (messages.length - validMessages.length);
 
                 lastMessageId = messages[messages.length - 1].id;
+
+                await sleep(400);
 
                 // Si on a traité moins de messages que la taille du batch, on a fini
                 if (messages.length < settings.store.batchSize) {
@@ -441,7 +607,9 @@ async function cleanChannel(channelId: string) {
         }
 
         // Nettoyage terminé
-        isCleaningInProgress = false;
+        if (!options?.skipSessionControl) {
+            isCleaningInProgress = false;
+        }
 
         const { deleted, failed, skipped, startTime } = cleaningStats;
         const finalTotal = deleted + failed + skipped;
@@ -463,7 +631,9 @@ async function cleanChannel(channelId: string) {
 • Temps moyen/message: ${avgTimePerMessage}ms`);
 
     } catch (error) {
-        isCleaningInProgress = false;
+        if (!options?.skipSessionControl) {
+            isCleaningInProgress = false;
+        }
         log(`❌ Erreur globale lors du nettoyage: ${error}`, "error");
     }
 }
@@ -539,7 +709,8 @@ export default definePlugin({
     contextMenus: {
         "channel-context": ChannelContextMenuPatch,
         "gdm-context": ChannelContextMenuPatch,
-        "user-context": ChannelContextMenuPatch
+        "user-context": ChannelContextMenuPatch,
+        "guild-context": GuildContextMenuPatch
     },
 
     start() {
@@ -551,17 +722,6 @@ export default definePlugin({
         log(`- ChannelStore: ${typeof ChannelStore}`);
         log(`- UserStore: ${typeof UserStore}`);
         log(`- Menu: ${typeof Menu}`);
-
-        // Si un canal est configuré dans les settings, proposer de le nettoyer
-        if (settings.store.targetChannelId.trim()) {
-            const channel = ChannelStore.getChannel(settings.store.targetChannelId);
-            if (channel) {
-                const channelName = channel.name || "Canal privé";
-                log(`🎯 Canal cible configuré: "${channelName}" (${settings.store.targetChannelId})`);
-            } else {
-                log("⚠️ Canal cible configuré mais introuvable", "warn");
-            }
-        }
 
         debugLog(`Configuration:
 • Délai: ${settings.store.delayBetweenDeletes}ms
