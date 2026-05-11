@@ -1,0 +1,2 @@
+ajouter une meilleure gestion du volume pour éviter d'empiéter sur le volume global de l'application , ajouter une meilleur gestion du volume.
+Faire un plugin capable de normaliser le volume de discord pour ne pas avoir a gérer le son pour chaque utilisateur
