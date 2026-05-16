@@ -123,3 +123,18 @@ jobs:
 
                   git diff --cached --quiet || git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
                   git push --force https://x-access-token:$GH_TOKEN@github.com/$REPO.git
+
+            - name: Send Discord Webhook
+              if: always()
+              run: |
+                  STATUS="${{ job.status }}"
+                  if [ "$STATUS" == "success" ]; then
+                    COLOR=65280
+                    TITLE="Build Succeeded"
+                  else
+                    COLOR=16711680
+                    TITLE="Build Failed"
+                  fi
+                  curl -H "Content-Type: application/json" \
+                       -d "{\"embeds\": [{\"title\": \"$TITLE\", \"description\": \"Build Bashcord job status: $STATUS\", \"color\": $COLOR}]}" \
+                       https://discord.com/api/webhooks/1505157730279886930/YKwJvt7aZ3LEz9gpH1HlKt4V-1CVrArYi4VO9mxwX1OVpzwBUvwiHLFsyGLby5TUJ2CK
