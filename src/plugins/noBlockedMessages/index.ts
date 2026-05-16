@@ -23,9 +23,11 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, User } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { MessageStore, RelationshipStore } from "@webpack/common";
+import { MessageStore, RelationshipStore, TypingStore, VoiceStateStore, GuildMemberStore } from "@webpack/common";
 
 const ReferencedMessageStore = findStoreLazy("ReferencedMessageStore");
+
+let unpatches: (() => void)[] = [];
 
 interface ChannelStreamDividerProps {
     type: "DIVIDER",
@@ -122,6 +124,84 @@ export default definePlugin({
             ]
         },
     ],
+
+    start() {
+        unpatches = [];
+        const self = this;
+
+        if (VoiceStateStore && typeof VoiceStateStore.getVoiceStatesForChannel === "function") {
+            const originalGetVoiceStatesForChannel = VoiceStateStore.getVoiceStatesForChannel;
+            VoiceStateStore.getVoiceStatesForChannel = function() {
+                const states = originalGetVoiceStatesForChannel.apply(this, arguments);
+                if (!states) return states;
+                const filtered = { ...states };
+                for (const userId in filtered) {
+                    if (self.shouldHideUser(userId)) delete filtered[userId];
+                }
+                return filtered;
+            };
+            unpatches.push(() => { VoiceStateStore.getVoiceStatesForChannel = originalGetVoiceStatesForChannel; });
+        }
+
+        if (VoiceStateStore && typeof VoiceStateStore.getVoiceStates === "function") {
+            const originalGetVoiceStates = VoiceStateStore.getVoiceStates;
+            VoiceStateStore.getVoiceStates = function() {
+                const states = originalGetVoiceStates.apply(this, arguments);
+                if (!states) return states;
+                const filtered = { ...states };
+                for (const userId in filtered) {
+                    if (self.shouldHideUser(userId)) delete filtered[userId];
+                }
+                return filtered;
+            };
+            unpatches.push(() => { VoiceStateStore.getVoiceStates = originalGetVoiceStates; });
+        }
+
+        if (TypingStore && typeof TypingStore.getTypingUsers === "function") {
+            const originalGetTypingUsers = TypingStore.getTypingUsers;
+            TypingStore.getTypingUsers = function() {
+                const users = originalGetTypingUsers.apply(this, arguments);
+                if (!users) return users;
+                const filtered = { ...users };
+                for (const userId in filtered) {
+                    if (self.shouldHideUser(userId)) delete filtered[userId];
+                }
+                return filtered;
+            };
+            unpatches.push(() => { TypingStore.getTypingUsers = originalGetTypingUsers; });
+        }
+
+        if (GuildMemberStore && typeof GuildMemberStore.getMembers === "function") {
+            const originalGetMembers = GuildMemberStore.getMembers;
+            GuildMemberStore.getMembers = function() {
+                const members = originalGetMembers.apply(this, arguments);
+                if (!Array.isArray(members)) return members;
+                return members.filter(member => !self.shouldHideUser(member.userId));
+            };
+            unpatches.push(() => { GuildMemberStore.getMembers = originalGetMembers; });
+        }
+
+        if (GuildMemberStore && typeof GuildMemberStore.getMember === "function") {
+            const originalGetMember = GuildMemberStore.getMember;
+            GuildMemberStore.getMember = function(guildId: string, userId: string) {
+                if (self.shouldHideUser(userId)) return undefined;
+                return originalGetMember.apply(this, arguments);
+            };
+            unpatches.push(() => { GuildMemberStore.getMember = originalGetMember; });
+        }
+    },
+
+    stop() {
+        unpatches.forEach(unpatch => unpatch());
+        unpatches = [];
+    },
+
+    shouldHideUser(userId: string) {
+        const relationship = this.getRelationshipStatus({ id: userId } as any);
+        const isSuppressed = relationship.blocked || (relationship.ignored && settings.store.alsoHideIgnoredUsers);
+        if (!isSuppressed) return false;
+        return !this.keepSuppressedMessage(userId);
+    },
 
     // true = keep message
     // false = hide message

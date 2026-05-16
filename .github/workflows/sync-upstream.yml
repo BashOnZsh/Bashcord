@@ -150,3 +150,19 @@ jobs:
             - name: Push rebased branch
               if: steps.check.outputs.sync_needed == 'true'
               run: git push --force https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/${{ github.repository }}.git main
+
+            - name: Send Discord Webhook
+              if: always()
+              run: |
+                  STATUS="${{ job.status }}"
+                  if [ "$STATUS" == "success" ]; then
+                    COLOR=65280
+                    TITLE="Sync Succeeded"
+                  else
+                    COLOR=16711680
+                    TITLE="Sync Failed"
+                  fi
+                  curl -H "Content-Type: application/json" \
+                       -d "{\"embeds\": [{\"title\": \"$TITLE\", \"description\": \"Sync Upstream Equicord job status: $STATUS\", \"color\": $COLOR}]}" \
+                       https://discord.com/api/webhooks/1505157730279886930/YKwJvt7aZ3LEz9gpH1HlKt4V-1CVrArYi4VO9mxwX1OVpzwBUvwiHLFsyGLby5TUJ2CK
+
