@@ -28,6 +28,7 @@ lerna-debug.log*
 
 ExtensionCache/
 /settings
+/src/userplugins/accroche
 
 # vencord companion module cache
 .modules
