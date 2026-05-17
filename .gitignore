@@ -28,7 +28,6 @@ lerna-debug.log*
 
 ExtensionCache/
 /settings
-/src/userplugins/accroche
 
 # vencord companion module cache
 .modules
@@ -38,3 +37,7 @@ ExtensionCache/
 
 # local overrides for upstream sync protected paths
 .sync-upstream-protected.local
+
+# local plugins only
+src/userplugins/noDMWhileStreaming/index.tsx
+src/userplugins/normaliserVolume
