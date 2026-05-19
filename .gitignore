@@ -41,3 +41,4 @@ ExtensionCache/
 # local plugins only
 src/userplugins/noDMWhileStreaming/index.tsx
 src/userplugins/normaliserVolume
+src/userplugins/captchaResolver

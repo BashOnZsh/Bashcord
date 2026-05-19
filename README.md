@@ -18,11 +18,11 @@ Bashcord est une modification Discord qui combine la puissance d'Equicord avec d
 Bashcord inclut tous les plugins d'Equicord plus nos plugins exclusifs :
 
 #### Plugins Bashcord exclusifs
+
 - **AutoDeco** - Déconnexion automatique
 - **AntiGroup** - Protection contre les groupes indésirables
 - **MessageCleaner** - Nettoyage automatique des messages
 - **Token Display** - Affichage sécurisé du token
-- **BypassUpload** - Contournement des limites d'upload
 - Et bien d'autres...
 
 ## 🚀 Installation
@@ -30,6 +30,7 @@ Bashcord inclut tous les plugins d'Equicord plus nos plugins exclusifs :
 ### Installation rapide
 
 **Windows**
+
 ```bash
 # Télécharger et exécuter l'installateur
 curl https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashotl.exe -o Bashotl.exe
@@ -37,6 +38,7 @@ curl https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashotl.exe -
 ```
 
 **Linux/macOS**
+
 ```bash
 # Script d'installation automatique
 curl -sS https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashcord-Linux-cli && ./Bashcord-Linux-cli
@@ -45,12 +47,14 @@ curl -sS https://github.com/BashOnZsh/Bashotl/releases/download/latest/Bashcord-
 ### Installation manuelle
 
 1. **Cloner le repository**
+
 ```bash
 git clone https://github.com/BashOnZsh/Bashcord.git
 cd Bashcord
 ```
 
 2. **Installer les dépendances**
+
 ```bash
 # Installer pnpm si ce n'est pas déjà fait
 npm install -g pnpm
@@ -60,11 +64,13 @@ pnpm install --frozen-lockfile
 ```
 
 3. **Compiler Bashcord**
+
 ```bash
 pnpm build
 ```
 
 4. **Injecter dans Discord**
+
 ```bash
 pnpm inject
 ```
@@ -72,6 +78,7 @@ pnpm inject
 ## 🛠️ Développement
 
 ### Prérequis
+
 - [Node.js LTS](https://nodejs.org/) (v18 ou plus récent)
 - [pnpm](https://pnpm.io/) (gestionnaire de paquets)
 - [Git](https://git-scm.com/)
@@ -139,6 +146,7 @@ export default definePlugin({
 ### Synchronisation avec Equicord
 
 Bashcord se synchronise automatiquement avec les mises à jour d'Equicord via GitHub Actions tout en préservant :
+
 - Les plugins exclusifs dans `src/userplugins/`
 - Le branding et l'interface personnalisée
 - Les workflows CI/CD personnalisés
@@ -146,20 +154,22 @@ Bashcord se synchronise automatiquement avec les mises à jour d'Equicord via Gi
 #### Fonctionnement selon le type d'installation
 
 **Pour les utilisateurs qui ont cloné le repo (Git)** :
+
 1. **Au démarrage** : Bashcord vérifie immédiatement s'il y a des mises à jour disponibles
 2. **Si une mise à jour est disponible** :
-   - Installation automatique via `git pull`
-   - Rebuild automatique des fichiers
-   - Notification à l'utilisateur avec option de redémarrer
-   - Redémarrage manuel via la notification ou le menu Discord
+    - Installation automatique via `git pull`
+    - Rebuild automatique des fichiers
+    - Notification à l'utilisateur avec option de redémarrer
+    - Redémarrage manuel via la notification ou le menu Discord
 
 **Pour les utilisateurs de l'installer (Standalone)** :
+
 1. **Au démarrage** : Bashcord vérifie les dernières releases GitHub de Bashcord
 2. **Si une nouvelle release est disponible** :
-   - Téléchargement automatique du fichier `.asar` depuis GitHub
-   - Remplacement automatique de l'ancien fichier
-   - Notification à l'utilisateur avec option de redémarrer
-   - Redémarrage manuel via la notification ou le menu Discord
+    - Téléchargement automatique du fichier `.asar` depuis GitHub
+    - Remplacement automatique de l'ancien fichier
+    - Notification à l'utilisateur avec option de redémarrer
+    - Redémarrage manuel via la notification ou le menu Discord
 
 ## 🤝 Contribution
 
