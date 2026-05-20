@@ -6,6 +6,7 @@
 
 import { openNotificationLogModal } from "@api/Notifications/notificationLog";
 import { useSettings } from "@api/Settings";
+import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { ErrorCard } from "@components/ErrorCard";
 import { Flex } from "@components/Flex";
@@ -14,7 +15,8 @@ import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { Margins } from "@utils/margins";
 import { identity } from "@utils/misc";
-import { Modal, openModal, Select, Slider } from "@webpack/common";
+import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { Select, Slider } from "@webpack/common";
 
 export function NotificationSection() {
     return (
@@ -38,13 +40,16 @@ export function NotificationSection() {
 
 export function openNotificationSettingsModal() {
     openModal(props => (
-        <Modal
-            {...props}
-            size="lg"
-            title="Notification Settings"
-        >
-            <NotificationSettings />
-        </Modal>
+        <ModalRoot {...props} size={ModalSize.MEDIUM}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold" style={{ flexGrow: 1 }}>Notification Settings</BaseText>
+                <ModalCloseButton onClick={props.onClose} />
+            </ModalHeader>
+
+            <ModalContent>
+                <NotificationSettings />
+            </ModalContent>
+        </ModalRoot>
     ));
 }
 
@@ -52,8 +57,8 @@ function NotificationSettings() {
     const settings = useSettings(["notifications.*"]).notifications;
 
     return (
-        <>
-            <Heading tag="h5">Notification Style</Heading>
+        <div style={{ padding: "1em 0" }}>
+            <Heading>Notification Style</Heading>
             {settings.useNative !== "never" && Notification?.permission === "denied" && (
                 <ErrorCard style={{ padding: "1em" }} className={Margins.bottom8}>
                     <Heading>Desktop Notification Permission denied</Heading>
@@ -129,6 +134,6 @@ function NotificationSettings() {
                 onValueRender={v => v === 200 ? "∞" : v}
                 onMarkerRender={v => v === 200 ? "∞" : v}
             />
-        </>
+        </div>
     );
 }
