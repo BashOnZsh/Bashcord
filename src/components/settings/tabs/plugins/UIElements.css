@@ -18,9 +18,10 @@
 }
 
 .vc-plugin-ui-elements-modal-content {
+    padding: 1em;
     display: flex;
     flex-direction: column;
-    gap: 2em;
+    gap: 1.5em;
 }
 
 .vc-plugin-ui-elements-switches {
