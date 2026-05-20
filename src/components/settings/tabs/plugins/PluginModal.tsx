@@ -19,7 +19,7 @@
 import "./PluginModal.css";
 
 import { generateId } from "@api/Commands";
-import { hasAnyVisibleSettings, isSettingHidden } from "@api/PluginManager";
+import { isSettingHidden } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
@@ -32,10 +32,11 @@ import { classNameFactory } from "@utils/css";
 import { proxyLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
 import { classes, isObjectEmpty } from "@utils/misc";
-import { OptionType, Plugin, PluginTag } from "@utils/types";
-import { RenderModalProps, User } from "@vencord/discord-types";
+import { ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { OptionType, Plugin } from "@utils/types";
+import { User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, FluxDispatcher, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { Clickable, FluxDispatcher, React, Toasts, Tooltip, useEffect, useMemo, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 import { Constructor } from "type-fest";
 
 import { PluginMeta } from "~plugins";
@@ -52,7 +53,7 @@ const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
 const WarningIcon = findComponentByCodeLazy("3.15H3.29c-1.74");
 const UserRecord: Constructor<Partial<User>> = proxyLazy(() => UserStore.getCurrentUser().constructor) as any;
 
-interface PluginModalProps extends RenderModalProps {
+interface PluginModalProps extends ModalProps {
     plugin: Plugin;
     onRestartNeeded(key: string): void;
 }
@@ -74,19 +75,16 @@ export function makeDummyUser(user: { username: string; id?: string; avatar?: st
     return newUser;
 }
 
-function PluginTags({ tags }: { tags: PluginTag[]; }) {
-    return (
-        <div className={cl("tags")}>
-            {tags.map(tag => (
-                <div key={tag} className={cl("tag")}>{tag}</div>
-            ))}
-        </div>
-    );
-}
-
 export default function PluginModal({ plugin, onRestartNeeded, onClose, transitionState }: PluginModalProps) {
+    const definedSettings = plugin.settings;
+    const optionDefs = definedSettings?.def;
     const pluginSettings = useSettings([`plugins.${plugin.name}.*`]).plugins[plugin.name];
-    const hasSettings = hasAnyVisibleSettings(plugin);
+    const hasSettings = Boolean(
+        pluginSettings &&
+        definedSettings &&
+        optionDefs &&
+        Object.values(optionDefs).some(s => s.type !== OptionType.CUSTOM && !isSettingHidden(definedSettings, s))
+    );
 
     // avoid layout shift by showing dummy users while loading users
     const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
@@ -119,17 +117,14 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }
 
     function renderSettings() {
-        const { settings } = plugin;
-        if (!hasSettings || !settings)
+        if (!hasSettings || !optionDefs)
             return <Paragraph>There are no settings for this plugin.</Paragraph>;
 
-        const options = Object.entries(settings.def).map(([key, setting]) => {
-            if (setting.type === OptionType.CUSTOM) return null;
-
-            if (isSettingHidden(settings, setting)) return null;
+        const options = Object.entries(optionDefs).map(([key, setting]) => {
+            if (setting.type === OptionType.CUSTOM || isSettingHidden(definedSettings!, setting)) return null;
 
             function onChange(newValue: any) {
-                const option = plugin.settings!.def[key];
+                const option = optionDefs[key];
                 if (!option || option.type === OptionType.CUSTOM) return;
 
                 pluginSettings[key] = newValue;
@@ -142,11 +137,10 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                 <ErrorBoundary noop key={key}>
                     <Component
                         id={key}
-                        setting={setting}
+                        option={setting}
                         onChange={debounce(onChange)}
                         pluginSettings={pluginSettings}
-                        definedSettings={settings}
-                        closePluginSettings={onClose}
+                        definedSettings={plugin.settings}
                     />
                 </ErrorBoundary>
             );
@@ -181,36 +175,27 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
 
     return (
-        <Modal
-            transitionState={transitionState}
-            onClose={onClose}
-            size="lg"
-            title={
-                <div className={cl("header")}>
-                    <BaseText tag="h1" weight="semibold" size="lg">{plugin.name}</BaseText>
+        <ModalRoot transitionState={transitionState} size={ModalSize.MEDIUM}>
+            <ModalHeader separator={false} className={cl("header")}>
+                <div className={cl("header-content")}>
+                    <BaseText size="lg" weight="semibold" className={cl("title")}>{plugin.name}</BaseText>
+                    <BaseText size="sm" className={cl("description")}>{plugin.description}</BaseText>
+                    {!!plugin.settingsAboutComponent && (
+                        <div className={Margins.top8}>
+                            <ErrorBoundary message="An error occurred while rendering this plugin's custom Info Component">
+                                <plugin.settingsAboutComponent />
+                            </ErrorBoundary>
+                        </div>
+                    )}
                 </div>
-            }
-            subtitle={
-                <div className={cl("info")}>
-                    <div>
-                        <Paragraph size="md">{plugin.description}</Paragraph>
-                        {!!plugin.tags?.length && <PluginTags tags={plugin.tags} />}
-                    </div>
+                <div className={cl("header-trailing")}>
+                    <CloseButton onClick={onClose} />
                 </div>
-            }
-        >
-            {!!plugin.settingsAboutComponent && (
-                <div className={classes(Margins.top16, cl("about-box"))}>
-                    <section>
-                        <ErrorBoundary message="An error occurred while rendering this plugin's custom Info Component">
-                            <plugin.settingsAboutComponent />
-                        </ErrorBoundary>
-                    </section>
-                </div>
-            )}
-            <div className={"vc-settings-modal-content"}>
+            </ModalHeader>
+
+            <ModalContent className={"vc-settings-modal-content"}>
                 <section>
-                    <Text variant="heading-lg/semibold" className={classes(Margins.top8, Margins.bottom8)}>Authors</Text>
+                    <BaseText size="lg" weight="semibold" color="text-strong" className={Margins.bottom8}>Authors</BaseText>
                     <div style={{ width: "fit-content" }}>
                         <ErrorBoundary noop>
                             <UserSummaryItem
@@ -241,8 +226,8 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                     <BaseText size="lg" weight="semibold" color="text-strong" className={classes(Margins.top16, Margins.bottom8)}>Settings</BaseText>
                     {renderSettings()}
                 </section>
-            </div>
-            <div>
+            </ModalContent>
+            <ModalFooter>
                 <Flex flexDirection="column" style={{ width: "100%" }}>
                     <Flex style={{ justifyContent: "space-between", alignItems: "center" }}>
                         {hasSettings ? (
@@ -275,8 +260,8 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                         )}
                     </Flex>
                 </Flex>
-            </div>
-        </Modal >
+            </ModalFooter>
+        </ModalRoot >
     );
 }
 
