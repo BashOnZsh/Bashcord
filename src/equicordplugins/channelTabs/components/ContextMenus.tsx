@@ -11,8 +11,8 @@ import { bookmarkFolderColors, bookmarkPlaceholderName, closeOtherTabs, closeTab
 import { Bookmark, BookmarkFolder, Bookmarks, ChannelTabsProps, UseBookmarkMethods } from "@equicordplugins/channelTabs/util/types";
 import { getIntlMessage } from "@utils/discord";
 import { Margins } from "@utils/margins";
-import { RenderModalProps } from "@vencord/discord-types";
-import { Button, ChannelStore, closeModal, ColorPicker, FluxDispatcher, Menu, Modal, openModal, ReadStateStore, ReadStateUtils, Select, TextInput, useMemo, useState } from "@webpack/common";
+import { closeModal, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
+import { Button, ChannelStore, ColorPicker, FluxDispatcher, Menu, ReadStateStore, ReadStateUtils, Select, TextInput, useMemo, useState, ChannelActions } from "@webpack/common";
 
 const legacyFolderColors: Record<string, string> = {
     "var(--channeltabs-red)": bookmarkFolderColors.Red,
@@ -115,7 +115,7 @@ function FolderChipPreview({ name, color, iconName }: { name: string; color: str
 }
 
 function FolderIconPickerModal({ modalProps, modalKey, name, color, iconName, onSelect, onColorChange }: {
-    modalProps: RenderModalProps,
+    modalProps: ModalProps,
     modalKey: string,
     name: string,
     color: string,
@@ -133,72 +133,73 @@ function FolderIconPickerModal({ modalProps, modalKey, name, color, iconName, on
     }, [iconNames, search]);
 
     return (
-        <Modal
-            {...modalProps}
-            size="sm"
-            title={<BaseText size="lg" weight="semibold">Choose Folder Icon</BaseText>}
-            actions={[
-                {
-                    text: "Close",
-                    variant: "secondary",
-                    onClick: () => closeModal(modalKey)
-                }
-            ]}
-        >
-            <Heading className={Margins.top16}>Preview</Heading>
-            <FolderChipPreview name={name} color={localColor} iconName={iconName} />
-            <Heading className={Margins.top16}>Icon Color</Heading>
-            <div className={Margins.top8}>
-                <ColorPicker
-                    color={colorToInt(localColor)}
-                    onChange={value => {
-                        const nextColor = intToColor(value);
-                        setLocalColor(nextColor);
-                        onColorChange(nextColor);
-                    }}
-                    showEyeDropper={false}
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Choose Folder Icon</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                <Heading className={Margins.top16}>Preview</Heading>
+                <FolderChipPreview name={name} color={localColor} iconName={iconName} />
+                <Heading className={Margins.top16}>Icon Color</Heading>
+                <div className={Margins.top8}>
+                    <ColorPicker
+                        color={colorToInt(localColor)}
+                        onChange={value => {
+                            const nextColor = intToColor(value);
+                            setLocalColor(nextColor);
+                            onColorChange(nextColor);
+                        }}
+                        showEyeDropper={false}
+                    />
+                </div>
+                <Heading className={Margins.top16}>Search</Heading>
+                <TextInput
+                    value={search}
+                    placeholder={`Search ${iconNames.length} icons...`}
+                    onChange={setSearch}
                 />
-            </div>
-            <Heading className={Margins.top16}>Search</Heading>
-            <TextInput
-                value={search}
-                placeholder={`Search ${iconNames.length} icons...`}
-                onChange={setSearch}
-            />
-            <div style={{
-                display: "grid",
-                gap: 8,
-                gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))",
-                marginTop: 16,
-                maxHeight: 320,
-                overflowY: "auto"
-            }}>
-                {filteredIconNames.map(name => (
-                    <button
-                        key={name}
-                        onClick={() => {
-                            onSelect(name);
-                            closeModal(modalKey);
-                        }}
-                        style={{
-                            alignItems: "center",
-                            background: name === iconName ? "var(--background-modifier-hover)" : "var(--background-secondary)",
-                            border: "1px solid var(--border-subtle)",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            display: "flex",
-                            height: 52,
-                            justifyContent: "center",
-                            padding: 0
-                        }}
-                        title={name}
-                        type="button"
-                    >
-                        <FolderGlyph color={localColor} iconName={name} />
-                    </button>
-                ))}
-            </div>
-        </Modal>
+                <div style={{
+                    display: "grid",
+                    gap: 8,
+                    gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))",
+                    marginTop: 16,
+                    maxHeight: 320,
+                    overflowY: "auto"
+                }}>
+                    {filteredIconNames.map(name => (
+                        <button
+                            key={name}
+                            onClick={() => {
+                                onSelect(name);
+                                closeModal(modalKey);
+                            }}
+                            style={{
+                                alignItems: "center",
+                                background: name === iconName ? "var(--background-modifier-hover)" : "var(--background-secondary)",
+                                border: "1px solid var(--border-subtle)",
+                                borderRadius: 8,
+                                cursor: "pointer",
+                                display: "flex",
+                                height: 52,
+                                justifyContent: "center",
+                                padding: 0
+                            }}
+                            title={name}
+                            type="button"
+                        >
+                            <FolderGlyph color={localColor} iconName={name} />
+                        </button>
+                    ))}
+                </div>
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >Close</Button>
+            </ModalFooter>
+        </ModalRoot>
     );
 }
 
@@ -262,7 +263,7 @@ function FolderAppearanceFields({
 }
 
 export function EditModal({ modalProps, modalKey, bookmark, onSave }: {
-    modalProps: RenderModalProps,
+    modalProps: ModalProps,
     modalKey: string,
     bookmark: Bookmark | BookmarkFolder,
     onSave: (name: string, color: string, iconName?: string) => void;
@@ -273,47 +274,46 @@ export function EditModal({ modalProps, modalKey, bookmark, onSave }: {
     const placeholder = bookmarkPlaceholderName(bookmark);
 
     return (
-        <Modal
-            {...modalProps}
-            size="sm"
-            title={<BaseText size="lg" weight="semibold">Edit Bookmark</BaseText>}
-            actions={[
-                {
-                    text: "Save",
-                    variant: "primary",
-                    onClick: () => onSave(name || placeholder, color, iconName)
-                },
-                {
-                    text: "Cancel",
-                    variant: "secondary",
-                    onClick: () => closeModal(modalKey)
-                }
-            ]}
-        >
-            {isBookmarkFolder(bookmark)
-                ? <FolderAppearanceFields
-                    name={name}
-                    setName={setName}
-                    color={color}
-                    setColor={setColor}
-                    iconName={iconName}
-                    setIconName={setIconName}
-                    placeholder={placeholder}
-                />
-                : <>
-                    <Heading className={Margins.top16}>Bookmark Name</Heading>
-                    <TextInput
-                        value={name === placeholder ? undefined : name}
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Edit Bookmark</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                {isBookmarkFolder(bookmark)
+                    ? <FolderAppearanceFields
+                        name={name}
+                        setName={setName}
+                        color={color}
+                        setColor={setColor}
+                        iconName={iconName}
+                        setIconName={setIconName}
                         placeholder={placeholder}
-                        onChange={setName}
                     />
-                </>}
-        </Modal>
+                    : <>
+                        <Heading className={Margins.top16}>Bookmark Name</Heading>
+                        <TextInput
+                            value={name === placeholder ? undefined : name}
+                            placeholder={placeholder}
+                            onChange={setName}
+                        />
+                    </>}
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    onClick={() => onSave(name || placeholder, color, iconName)}
+                >Save</Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >Cancel</Button>
+            </ModalFooter>
+        </ModalRoot>
     );
 }
 
 function AddToFolderModal({ modalProps, modalKey, bookmarks, onSave }: {
-    modalProps: RenderModalProps,
+    modalProps: any,
     modalKey: string,
     bookmarks: Bookmarks,
     onSave: (folderIndex: number, folderName: string, folderColor: string, iconName?: string) => void;
@@ -324,79 +324,117 @@ function AddToFolderModal({ modalProps, modalKey, bookmarks, onSave }: {
     const [iconName, setIconName] = useState<string | undefined>();
 
     return (
-        <Modal
-            {...modalProps}
-            size="sm"
-            title={<BaseText size="lg" weight="semibold">Add Bookmark to Folder</BaseText>}
-            actions={[
-                {
-                    text: "Save",
-                    variant: "primary",
-                    onClick: () => onSave(folderIndex, folderName, folderColor, iconName)
-                },
-                {
-                    text: "Cancel",
-                    variant: "secondary",
-                    onClick: () => closeModal(modalKey)
-                }
-            ]}
-        >
-            <Heading className={Margins.top16}>Select a folder</Heading>
-            <Select
-                options={[...Object.entries(bookmarks)
-                    .filter(([, bookmark]) => isBookmarkFolder(bookmark))
-                    .map(([index, bookmark]) => ({
-                        label: bookmark.name,
-                        value: parseInt(index, 10)
-                    })),
-                {
-                    label: "Create one",
-                    value: -1,
-                    default: true
-                }]}
-                isSelected={v => v === folderIndex}
-                select={setIndex}
-                serialize={String}
-            />
-            {folderIndex === -1 && <FolderAppearanceFields
-                name={folderName}
-                setName={setFolderName}
-                color={folderColor}
-                setColor={setFolderColor}
-                iconName={iconName}
-                setIconName={setIconName}
-            />}
-        </Modal>
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Add Bookmark to Folder</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                <Heading className={Margins.top16}>Select a folder</Heading>
+                <Select
+                    options={[...Object.entries(bookmarks)
+                        .filter(([, bookmark]) => isBookmarkFolder(bookmark))
+                        .map(([index, bookmark]) => ({
+                            label: bookmark.name,
+                            value: parseInt(index, 10)
+                        })),
+                    {
+                        label: "Create one",
+                        value: -1,
+                        default: true
+                    }]}
+                    isSelected={v => v === folderIndex}
+                    select={setIndex}
+                    serialize={String}
+                />
+                {folderIndex === -1 && <FolderAppearanceFields
+                    name={folderName}
+                    setName={setFolderName}
+                    color={folderColor}
+                    setColor={setFolderColor}
+                    iconName={iconName}
+                    setIconName={setIconName}
+                />}
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    onClick={() => onSave(folderIndex, folderName, folderColor, iconName)}
+                >Save</Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >Cancel</Button>
+            </ModalFooter>
+        </ModalRoot>
     );
 }
 
-function DeleteFolderConfirmationModal({ modalProps, modalKey, onConfirm }: {
-    modalProps: RenderModalProps,
-    modalKey: string,
-    onConfirm: () => void;
-}) {
+function DeleteFolderConfirmationModal({ modalProps, modalKey, onConfirm }) {
     return (
-        <Modal
-            {...modalProps}
-            size="sm"
-            title={<BaseText size="lg" weight="semibold">Are you sure?</BaseText>}
-            actions={[
-                {
-                    text: "Delete",
-                    variant: "critical-primary",
-                    onClick: onConfirm
-                },
-                {
-                    text: "Cancel",
-                    variant: "secondary",
-                    onClick: () => closeModal(modalKey)
-                }
-            ]}
-        >
-            <Paragraph className={Margins.top16}>
-                Deleting a bookmark folder will also delete all bookmarks within it.
-            </Paragraph>
-        </Modal>
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Are you sure?</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                <Paragraph className={Margins.top16}>
+                    Deleting a bookmark folder will also delete all bookmarks within it.
+                </Paragraph>
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    color={Button.Colors.RED}
+                    onClick={onConfirm}
+                >
+                    Delete
+                </Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >
+                    Cancel
+                </Button>
+            </ModalFooter>
+        </ModalRoot>
+    );
+}
+
+export function AddByIdModal({ modalProps, modalKey, onSave }: {
+    modalProps: ModalProps,
+    modalKey: string,
+    onSave: (id: string) => void;
+}) {
+    const [id, setId] = useState("");
+
+    return (
+        <ModalRoot {...modalProps}>
+            <ModalHeader>
+                <BaseText size="lg" weight="semibold">Add by ID</BaseText>
+            </ModalHeader>
+            <ModalContent>
+                <Paragraph className={Margins.top16} style={{ textAlign: "center", marginBottom: 8 }}>
+                    Enter a Channel ID, Server ID, or User ID.
+                </Paragraph>
+                <TextInput
+                    value={id}
+                    placeholder="123456789012345678"
+                    onChange={setId}
+                    style={{ marginTop: 12, marginBottom: 16 }}
+                    inputStyle={{ textAlign: "center", fontSize: "16px", letterSpacing: "1px" }}
+                />
+            </ModalContent>
+            <ModalFooter>
+                <Button
+                    onClick={() => onSave(id.trim())}
+                    disabled={!id.trim()}
+                >Add</Button>
+                <Button
+                    color={Button.Colors.TRANSPARENT}
+                    look={Button.Looks.FILLED}
+                    onClick={() => closeModal(modalKey)}
+                >Cancel</Button>
+            </ModalFooter>
+        </ModalRoot>
     );
 }
 
@@ -517,6 +555,8 @@ export function TabContextMenu({ tab }: { tab: ChannelTabsProps; }) {
     const [compact, setCompact] = useState(tab.compact);
     const { showBookmarkBar } = settings.use(["showBookmarkBar"]);
 
+    const isVoice = channel && (channel.type === 2 || channel.type === 13 || channel.type === 1 || channel.type === 3);
+
     return (
         <Menu.Menu
             navId="channeltabs-tab-context"
@@ -524,6 +564,15 @@ export function TabContextMenu({ tab }: { tab: ChannelTabsProps; }) {
             aria-label="ChannelTabs Tab Context Menu"
         >
             <Menu.MenuGroup>
+                {isVoice &&
+                    <Menu.MenuItem
+                        id="connect-call"
+                        label="Connect to Call"
+                        action={() => {
+                            ChannelActions.selectVoiceChannel(channel.id);
+                        }}
+                    />
+                }
                 {channel &&
                     <Menu.MenuItem
                         id="mark-as-read"
