@@ -42,3 +42,4 @@ ExtensionCache/
 src/userplugins/noDMWhileStreaming/index.tsx
 src/userplugins/normaliserVolume
 src/userplugins/captchaResolver
+src/userplugins/streamBlurPrivacy
