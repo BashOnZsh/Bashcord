@@ -87,23 +87,51 @@ async function cleanGuild(guildId: string) {
             return;
         }
 
-        log(`🧹 Nettoyage du serveur (1 seule requete de recherche): ${guild.name}`);
-        const messages = await getGuildMessagesByAuthorOnce(guildId, currentUserId);
+        log(`🔍 Recherche globale des messages sur le serveur: ${guild.name}...`);
+        
+        let allMessages: Message[] = [];
+        let offset = 0;
+        let totalResults = 1;
+        let searchAttempts = 0;
 
-        if (messages.length === 0) {
-            log("Aucun message trouve par la recherche serveur", "warn");
+        while (offset < totalResults && !shouldStopCleaning && offset < 5000) {
+            const { messages, total } = await searchGuildMessages(guildId, currentUserId, offset);
+            
+            if (searchAttempts === 0) {
+                totalResults = total;
+                log(`📊 Nombre total de messages indexés: ${total}`);
+            }
+
+            if (messages.length === 0) break;
+
+            allMessages.push(...messages);
+            offset += 25; // Les résultats de l'API de recherche Discord sont paginés par 25
+            searchAttempts++;
+
+            if (searchAttempts % 4 === 0) {
+                log(`⏳ Recherche en cours: ${allMessages.length} messages récupérés...`);
+            }
+
+            await sleep(1000); // Pause anti-rate-limit
+        }
+
+        // Déduplication par ID au cas où
+        const uniqueMessages = Array.from(new Map(allMessages.map(m => [m.id, m])).values());
+        
+        if (uniqueMessages.length === 0) {
+            log("Aucun message trouvé lors de la recherche", "warn");
             return;
         }
 
-        const validMessages = messages.filter(msg => canDeleteMessage(msg, currentUserId));
+        const validMessages = uniqueMessages.filter(msg => canDeleteMessage(msg, currentUserId));
         cleaningStats.total = validMessages.length;
 
         if (validMessages.length === 0) {
-            log("Aucun message supprimable trouve par la recherche serveur", "warn");
+            log("Aucun message supprimable trouvé sur ce serveur", "warn");
             return;
         }
 
-        log(`🧹 Suppression de ${validMessages.length} message(s) trouves par recherche serveur`);
+        log(`🧹 Suppression de ${validMessages.length} message(s) trouvés par recherche serveur`);
         let processed = 0;
         for (const message of validMessages) {
             if (shouldStopCleaning) break;
@@ -124,7 +152,7 @@ async function cleanGuild(guildId: string) {
             }
         }
 
-        cleaningStats.skipped += messages.length - validMessages.length;
+        cleaningStats.skipped += uniqueMessages.length - validMessages.length;
         log(`✅ Nettoyage du serveur terminé : ${guild.name}`);
     } finally {
         isCleaningInProgress = false;
@@ -178,7 +206,7 @@ const settings = definePluginSettings({
     batchSize: {
         type: OptionType.SLIDER,
         description: "Nombre de messages à traiter par batch",
-        default: 50,
+        default: 100,
         markers: [10, 25, 50, 100],
         minValue: 1,
         maxValue: 100,
@@ -271,10 +299,13 @@ function canDeleteMessage(message: Message, currentUserId: string): boolean {
             return false;
         }
 
-        // Messages système (SAUF type 19 qui est REPLY)
-        if (settings.store.skipSystemMessages && message.type !== 0 && message.type !== 19) {
-            debugLog(`  ❌ Message système (type ${message.type})`);
-            return false;
+        // Messages système
+        if (settings.store.skipSystemMessages) {
+            const allowedTypes = [0, 19, 20]; // DEFAULT, REPLY, CHAT_INPUT_COMMAND
+            if (!allowedTypes.includes(message.type)) {
+                debugLog(`  ❌ Message système (type ${message.type})`);
+                return false;
+            }
         }
 
         // Détection des réponses - Type 19 OU présence de messageReference
@@ -329,33 +360,52 @@ function canDeleteMessage(message: Message, currentUserId: string): boolean {
 }
 
 // Fonction pour supprimer un message
-async function deleteMessage(channelId: string, messageId: string): Promise<boolean> {
-    try {
-        debugLog(`Tentative de suppression du message ${messageId} dans le canal ${channelId}`);
+async function deleteMessage(channelId: string, messageId: string, maxRetries = 3): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        if (shouldStopCleaning) return false;
+        
+        try {
+            debugLog(`Tentative de suppression du message ${messageId} dans le canal ${channelId} (essai ${attempt})`);
 
-        const response = await RestAPI.del({
-            url: `/channels/${channelId}/messages/${messageId}`
-        });
+            const response = await RestAPI.del({
+                url: `/channels/${channelId}/messages/${messageId}`
+            });
 
-        debugLog(`✅ Message ${messageId} supprimé avec succès`);
-        return true;
-    } catch (error: any) {
-        const errorMessage = error?.message || error?.toString() || 'Erreur inconnue';
-        const statusCode = error?.status || error?.statusCode || 'N/A';
+            debugLog(`✅ Message ${messageId} supprimé avec succès`);
+            return true;
+        } catch (error: any) {
+            const errorMessage = error?.message || error?.toString() || 'Erreur inconnue';
+            const statusCode = error?.status || error?.statusCode || 'N/A';
 
-        debugLog(`❌ Erreur lors de la suppression du message ${messageId}: ${errorMessage} (Status: ${statusCode})`);
+            debugLog(`❌ Erreur lors de la suppression du message ${messageId}: ${errorMessage} (Status: ${statusCode})`);
 
-        // Log des erreurs spécifiques
-        if (statusCode === 403) {
-            debugLog(`❌ Permission refusée pour supprimer le message ${messageId}`);
-        } else if (statusCode === 404) {
-            debugLog(`❌ Message ${messageId} introuvable (déjà supprimé?)`);
-        } else if (statusCode === 429) {
-            debugLog(`❌ Rate limit atteint pour la suppression`);
+            if (statusCode === 429) {
+                const retryAfter = error?.body?.retry_after || error?.retry_after;
+                let waitTime = 5000; // 5 secondes par défaut
+                
+                if (retryAfter) {
+                    const ra = Number(retryAfter);
+                    waitTime = ra < 1000 ? Math.ceil(ra * 1000) : ra;
+                    if (waitTime > 60000) waitTime = 60000; // Bloquer à 60s max
+                }
+                
+                log(`⚠️ Limite de requêtes (429) atteinte. Pause automatique de ${waitTime / 1000}s... (Essai ${attempt}/${maxRetries})`, "warn");
+                await sleep(waitTime + 500); // On ajoute 500ms de marge de sécurité
+                continue; // On relance la boucle pour réessayer
+            } else if (statusCode === 404) {
+                debugLog(`❌ Message ${messageId} introuvable (déjà supprimé?)`);
+                return true; // S'il n'existe plus, on considère que c'est un succès
+            } else if (statusCode === 403) {
+                debugLog(`❌ Permission refusée pour supprimer le message ${messageId}`);
+                return false;
+            }
+
+            if (attempt === maxRetries) {
+                return false;
+            }
         }
-
-        return false;
     }
+    return false;
 }
 
 // Fonction pour obtenir les messages d'un canal
@@ -396,35 +446,104 @@ async function getChannelMessages(channelId: string, before?: string): Promise<M
     }
 }
 
-// Récupérer les messages d'un utilisateur dans un serveur (une seule requête)
-async function getGuildMessagesByAuthorOnce(guildId: string, userId: string): Promise<Message[]> {
-    try {
-        const limit = 25;
-        const url = `/guilds/${guildId}/messages/search?author_id=${userId}&include_nsfw=true&limit=${limit}`;
-        debugLog(`Recherche des messages (1 seule requete): ${url}`);
+// Récupérer les messages d'un utilisateur dans un serveur avec pagination
+async function searchGuildMessages(guildId: string, userId: string, offset: number, maxRetries = 3): Promise<{ messages: Message[], total: number }> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const url = `/guilds/${guildId}/messages/search?author_id=${userId}&include_nsfw=true&offset=${offset}`;
+            debugLog(`Recherche des messages: ${url}`);
 
-        const response = await RestAPI.get({ url });
-        const body = response?.body;
-        const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+            const response = await RestAPI.get({ url });
+            const body = response?.body;
+            const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+            const total = body?.total_results || 0;
 
-        const flattened: Message[] = [];
-        for (const entry of rawMessages) {
-            if (Array.isArray(entry) && entry[0]) {
-                flattened.push(entry[0]);
-            } else if (entry) {
-                flattened.push(entry);
+            const flattened: Message[] = [];
+            for (const entry of rawMessages) {
+                if (Array.isArray(entry)) {
+                    const targetMsg = entry.find((m: any) => m?.hit) || entry.find((m: any) => m?.author?.id === userId) || entry[0];
+                    if (targetMsg) flattened.push(targetMsg);
+                } else if (entry) {
+                    flattened.push(entry);
+                }
+            }
+
+            debugLog(`Recherche: ${flattened.length} message(s) recu(s) pour offset ${offset}`);
+            return { messages: flattened, total };
+        } catch (error: any) {
+            const statusCode = error?.status || error?.statusCode || "N/A";
+            
+            if (statusCode === 429) {
+                const retryAfter = error?.body?.retry_after || error?.retry_after;
+                let waitTime = 5000;
+                if (retryAfter) {
+                    const ra = Number(retryAfter);
+                    waitTime = ra < 1000 ? Math.ceil(ra * 1000) : ra;
+                    if (waitTime > 60000) waitTime = 60000;
+                }
+                log(`⚠️ Rate limit (429) sur la recherche serveur. Pause de ${waitTime / 1000}s... (Essai ${attempt}/${maxRetries})`, "warn");
+                await sleep(waitTime + 500);
+                continue;
+            }
+            
+            if (attempt === maxRetries) {
+                const errorMessage = error?.message || error?.toString() || "Erreur inconnue";
+                log(`❌ Erreur lors de la recherche des messages serveur: ${errorMessage} (Status: ${statusCode})`, "error");
+                return { messages: [], total: 0 };
             }
         }
-
-        debugLog(`Recherche: ${flattened.length} message(s) recu(s)`);
-        return flattened;
-    } catch (error: any) {
-        const errorMessage = error?.message || error?.toString() || "Erreur inconnue";
-        const statusCode = error?.status || error?.statusCode || "N/A";
-
-        log(`❌ Erreur lors de la recherche des messages serveur: ${errorMessage} (Status: ${statusCode})`, "error");
-        return [];
     }
+    return { messages: [], total: 0 };
+}
+
+// Récupérer les messages d'un utilisateur dans un canal avec pagination
+async function searchChannelMessages(channelId: string, userId: string, offset: number, maxRetries = 3): Promise<{ messages: Message[], total: number }> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const url = `/channels/${channelId}/messages/search?author_id=${userId}&include_nsfw=true&offset=${offset}`;
+            debugLog(`Recherche des messages canal: ${url}`);
+
+            const response = await RestAPI.get({ url });
+            const body = response?.body;
+            const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+            const total = body?.total_results || 0;
+
+            const flattened: Message[] = [];
+            for (const entry of rawMessages) {
+                if (Array.isArray(entry)) {
+                    const targetMsg = entry.find((m: any) => m?.hit) || entry.find((m: any) => m?.author?.id === userId) || entry[0];
+                    if (targetMsg) flattened.push(targetMsg);
+                } else if (entry) {
+                    flattened.push(entry);
+                }
+            }
+
+            debugLog(`Recherche canal: ${flattened.length} message(s) recu(s) pour offset ${offset}`);
+            return { messages: flattened, total };
+        } catch (error: any) {
+            const statusCode = error?.status || error?.statusCode || "N/A";
+            
+            if (statusCode === 429) {
+                const retryAfter = error?.body?.retry_after || error?.retry_after;
+                let waitTime = 5000;
+                if (retryAfter) {
+                    const ra = Number(retryAfter);
+                    waitTime = ra < 1000 ? Math.ceil(ra * 1000) : ra;
+                    if (waitTime > 60000) waitTime = 60000;
+                }
+                log(`⚠️ Rate limit (429) sur la recherche canal. Pause de ${waitTime / 1000}s... (Essai ${attempt}/${maxRetries})`, "warn");
+                await sleep(waitTime + 500);
+                continue;
+            }
+            
+            if (attempt === maxRetries) {
+                const errorMessage = error?.message || error?.toString() || "Erreur inconnue";
+                log(`❌ Erreur lors de la recherche canal: ${errorMessage} (Status: ${statusCode})`, "error");
+                return { messages: [], total: 0 };
+            }
+        }
+    }
+    return { messages: [], total: 0 };
 }
 
 // Fonction pour afficher la progression
@@ -495,114 +614,65 @@ async function cleanChannel(channelId: string, options?: { skipSessionControl?: 
             startTime: Date.now()
         };
 
-        log(`🧹 Début du nettoyage de "${channelName}"`);
+        log(`🔍 Recherche rapide des messages dans "${channelName}"...`);
+        let allMessages: Message[] = [];
+        let offset = 0;
+        let totalResults = 1;
+        let searchAttempts = 0;
 
-        let lastMessageId: string | undefined;
-        let totalProcessed = 0;
-        let emptyValidBatches = 0;
-        const maxEmptyValidBatches = 1;
+        while (offset < totalResults && !shouldStopCleaning && offset < 5000) {
+            const { messages, total } = await searchChannelMessages(channelId, currentUserId, offset);
+            
+            if (searchAttempts === 0) {
+                totalResults = total;
+                log(`📊 Nombre total de messages indexés: ${total}`);
+            }
 
-        // Boucle principale de nettoyage
-        while (!shouldStopCleaning) {
-            try {
-                const messages = await getChannelMessages(channelId, lastMessageId);
+            if (messages.length === 0) break;
 
-                if (messages.length === 0) {
-                    log("Plus de messages à traiter");
-                    break;
-                }
+            allMessages.push(...messages);
+            offset += 25;
+            searchAttempts++;
 
-                debugLog(`Traitement de ${messages.length} messages...`);
+            if (searchAttempts % 4 === 0) {
+                log(`⏳ Recherche en cours: ${allMessages.length} messages récupérés...`);
+            }
 
-                // Afficher un aperçu des messages trouvés
-                for (let i = 0; i < Math.min(3, messages.length); i++) {
-                    const msg = messages[i];
-                    debugLog(`  [${i}] ID: ${msg.id}, Type: ${msg.type}, Author: ${msg.author?.id}, Ref: ${(msg as any).messageReference ? 'OUI' : 'NON'}`);
-                }
+            await sleep(1000);
+        }
 
-                const validMessages = messages.filter(msg => canDeleteMessage(msg, currentUserId));
-                debugLog(`${validMessages.length} messages valides sur ${messages.length}`);
+        const uniqueMessages = Array.from(new Map(allMessages.map(m => [m.id, m])).values());
+        
+        if (uniqueMessages.length === 0) {
+            log("Aucun message trouvé lors de la recherche", "warn");
+        } else {
+            const validMessages = uniqueMessages.filter(msg => canDeleteMessage(msg, currentUserId));
+            cleaningStats.total = validMessages.length;
 
-                if (validMessages.length === 0) {
-                    // Si aucun message valide dans ce batch, passer au suivant
-                    lastMessageId = messages[messages.length - 1].id;
-                    cleaningStats.skipped += messages.length;
-                    emptyValidBatches++;
-                    debugLog(`Aucun message valide dans ce batch, passage au suivant`);
-                    if (emptyValidBatches >= maxEmptyValidBatches) {
-                        log("Aucun message supprimable trouve dans le dernier batch, arret pour limiter les requetes", "warn");
-                        break;
-                    }
-                    await sleep(400);
-                    continue;
-                }
-
-                emptyValidBatches = 0;
-
-                // Supprimer les messages un par un
+            if (validMessages.length === 0) {
+                log("Aucun message supprimable trouvé", "warn");
+            } else {
+                log(`🧹 Suppression de ${validMessages.length} message(s) trouvés par recherche`);
+                let processed = 0;
                 for (const message of validMessages) {
-                    if (shouldStopCleaning) {
-                        log("Arrêt demandé par l'utilisateur");
-                        break;
-                    }
+                    if (shouldStopCleaning) break;
 
                     const success = await deleteMessage(channelId, message.id);
-
                     if (success) {
                         cleaningStats.deleted++;
-                        debugLog(`✅ Message ${message.id} supprimé`);
                     } else {
                         cleaningStats.failed++;
-                        debugLog(`❌ Échec de suppression du message ${message.id}`);
                     }
 
-                    totalProcessed++;
-
-                    // Délai anti-rate-limit
+                    processed++;
                     if (settings.store.delayBetweenDeletes > 0) {
-                        await new Promise(resolve => setTimeout(resolve, settings.store.delayBetweenDeletes));
+                        await sleep(settings.store.delayBetweenDeletes);
                     }
-
-                    // Mise à jour de la progression tous les 10 messages
-                    if (totalProcessed % 10 === 0) {
+                    if (processed % 10 === 0) {
                         updateProgress();
                     }
                 }
-
-                // Messages non valides comptés comme ignorés
-                cleaningStats.skipped += (messages.length - validMessages.length);
-
-                lastMessageId = messages[messages.length - 1].id;
-
-                await sleep(400);
-
-                // Si on a traité moins de messages que la taille du batch, on a fini
-                if (messages.length < settings.store.batchSize) {
-                    debugLog(`Batch incomplet (${messages.length}/${settings.store.batchSize}), fin du traitement`);
-                    break;
-                }
-
-            } catch (error: any) {
-                const errorMessage = error?.message || error?.toString() || 'Erreur inconnue';
-                const statusCode = error?.status || error?.statusCode || 'N/A';
-
-                log(`❌ Erreur dans la boucle de nettoyage: ${errorMessage} (Status: ${statusCode})`, "error");
-                cleaningStats.failed++;
-
-                // Gestion spécifique des erreurs de rate limiting
-                if (statusCode === 429) {
-                    log("Rate limit atteint, pause prolongée...", "warn");
-                    await new Promise(resolve => setTimeout(resolve, 30000)); // 30 secondes
-                } else {
-                    // Attendre un peu avant de continuer en cas d'erreur normale
-                    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 secondes
-                }
-
-                // Si trop d'erreurs consécutives, arrêter
-                if (cleaningStats.failed > 15) {
-                    log("Trop d'erreurs consécutives, arrêt du nettoyage", "error");
-                    break;
-                }
+                cleaningStats.skipped += uniqueMessages.length - validMessages.length;
             }
         }
 
