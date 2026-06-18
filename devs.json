@@ -591,6 +591,10 @@
     "prism": {
       "name": "prism",
       "id": "390884143749136386"
+    },
+    "nightmaresan": {
+      "name": "NightmareSan",
+      "id": "304239816466235392"
     }
   },
   "equicord": {
@@ -1277,6 +1281,10 @@
     "pandaptable": {
       "name": "pandaptable",
       "id": "97153209843335168"
+    },
+    "SobakinTech": {
+      "name": "sobakintech",
+      "id": "745203026335236178"
     }
   }
 }
